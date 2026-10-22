@@ -70,7 +70,7 @@ function setup() {
   ScriptApp.newTrigger("dailyShops").timeBased().everyDays(1).atHour(7).inTimezone("Asia/Tokyo").create();
   ScriptApp.newTrigger("syncSupabase").timeBased().everyHours(1).create();
   log_("setup", "シートと自動実行を作りました");
-  SpreadsheetApp.getUi().alert("準備ができました。毎朝7時台に新店、1時間ごとに投稿とアカウントが更新されます。");
+  try { SpreadsheetApp.getUi().alert("準備ができました。毎朝7時台に新店、1時間ごとに投稿とアカウントが更新されます。"); } catch (e) { /* エディタから実行したとき */ }
 }
 
 function onOpen() {
@@ -84,6 +84,7 @@ function onOpen() {
 
 // ===================================================================== 新店
 function dailyShops() {
+  if (!props_().GITHUB_TOKEN) { log_("新店", "GITHUB_TOKEN が未設定のため取りこみをとばしました"); updateShopStatuses(); return; }
   const added = importResearchInbox();
   updateShopStatuses();
   const n = publishResearch();
