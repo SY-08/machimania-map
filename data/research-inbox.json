@@ -1,1 +1,50 @@
-{"updated": null, "items": []}
+{
+ "updated": "2026-10-22T23:30:00+09:00",
+ "items": [
+  {
+   "id": "r-20261022-1",
+   "name": "京都北白川 ラーメン魁力屋 足利店",
+   "genre": "ramen",
+   "pref": "栃木県",
+   "city": "足利市",
+   "address": "栃木県足利市福富町1139-1",
+   "opened": "2026-10-23",
+   "summary": "京都背脂醤油ラーメンが看板。駐車場21台・ボックス席ありの郊外型店舗。",
+   "background": "2005年京都発祥のチェーン（全国194店舗）で、栃木県への初出店。",
+   "sources": [
+    "https://prtimes.jp/main/html/rd/p/000000051.000185678.html"
+   ],
+   "found": "2026-10-22"
+  },
+  {
+   "id": "r-20261022-2",
+   "name": "穴太商店 木更津店",
+   "genre": "cafe",
+   "pref": "千葉県",
+   "city": "木更津市",
+   "address": "千葉県木更津市瓜倉240-2",
+   "opened": "2026-10-29",
+   "summary": "自社米の米粉パンや米麹甘酒を扱うカフェ。ペット可テラス、県内地酒コーナーあり。",
+   "background": "君津市などで米農家を営む穴太ホールディングスの6店舗目。",
+   "sources": [
+    "https://prtimes.jp/main/html/rd/p/000000048.000111326.html"
+   ],
+   "found": "2026-10-22"
+  },
+  {
+   "id": "r-20261022-3",
+   "name": "hitosumi coffee stand",
+   "genre": "cafe",
+   "pref": "東京都",
+   "city": "品川区",
+   "address": "東京都品川区北品川1-22-19",
+   "opened": "2026-10-22",
+   "summary": "テイクアウト中心のスペシャルティコーヒースタンド。WEB事前注文とホットサンド。",
+   "background": "旧東海道・品川宿の面影が残る北品川の一角に出店。",
+   "sources": [
+    "https://prtimes.jp/main/html/rd/p/000000001.000192156.html"
+   ],
+   "found": "2026-10-22"
+  }
+ ]
+}

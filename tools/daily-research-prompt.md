@@ -14,7 +14,7 @@
    - 店名・住所（番地まで）・オープン日（予定日でも可）が確認できる
    - 実店舗の飲食店（キッチンカー・期間限定のポップアップ・閉店済みは除く）
    - 誹謗中傷や、根拠のないうわさを書かない
-5. 位置を決める：住所を国土地理院の住所検索（https://msearch.gsi.go.jp/address-search/AddressSearch?q=住所 を WebFetch）で緯度・経度にする。取れないものは除外する。
+5. 位置：住所は番地まで正確に書く（〒は不要）。緯度・経度はスプレッドシート側が国土地理院の住所検索で自動で付けるので、`lat`・`lng` は書かなくてよい（確かな値がわかるときだけ書く）。
 6. 受け箱の `items` に次の形で追記し、`updated` を今日の日付（ISO 8601）にする。
 ```json
 {
@@ -22,7 +22,6 @@
   "name": "店名",
   "genre": "ramen|udon|cafe|sweets|izakaya|bakery|curry|sushi|yakiniku|chinese|western|other",
   "pref": "都道府県", "city": "市区町村", "address": "住所",
-  "lat": 35.0, "lng": 139.0,
   "opened": "YYYY-MM-DD",
   "summary": "わかる範囲の概要（60字程度・事実のみ）",
   "background": "出店の背景（系列・移転・地元とのつながりなど、出典にあることだけ。60字程度）",

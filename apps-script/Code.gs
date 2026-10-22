@@ -106,10 +106,16 @@ function importResearchInbox() {
   const seenKey = new Set(rows.map((r) => norm_(r["店名"]) + "|" + norm_(r["住所"])));
   const out = [];
   for (const it of inbox.items) {
-    if (!it || !it.name || it.lat == null || it.lng == null) continue;
+    if (!it || !it.name) continue;
     const id = it.id || ("r-" + Utilities.getUuid().slice(0, 8));
     const key = norm_(it.name) + "|" + norm_(it.address || "");
     if (seen.has(id) || seenKey.has(key)) continue;
+    // 緯度・経度がないときは、住所から国土地理院の住所検索で調べる
+    if ((it.lat == null || it.lng == null) && it.address) {
+      const p = geocode_(it.address);
+      if (p) { it.lat = p.lat; it.lng = p.lng; }
+    }
+    if (it.lat == null || it.lng == null) continue;
     seen.add(id); seenKey.add(key);
     out.push(SHEETS.shops.headers.map((h) => ({
       "ID": id, "店名": it.name, "ジャンル": GENRES.indexOf(it.genre) >= 0 ? it.genre : "other",
@@ -264,6 +270,20 @@ function syncSet_(path, wantIds, mk) {
 }
 
 // ===================================================================== 道具
+function geocode_(address) {
+  try {
+    const q = String(address).replace(/〒?\d{3}-?\d{4}\s*/, "").trim();
+    const res = UrlFetchApp.fetch("https://msearch.gsi.go.jp/address-search/AddressSearch?q=" + encodeURIComponent(q), { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return null;
+    const list = JSON.parse(res.getContentText());
+    if (!list.length) return null;
+    const [lng, lat] = list[0].geometry.coordinates;
+    if (!(lat > 20 && lat < 46 && lng > 122 && lng < 154)) return null;
+    Utilities.sleep(300);
+    return { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6 };
+  } catch (e) { return null; }
+}
+
 function props_() { return PropertiesService.getScriptProperties().getProperties(); }
 
 function supa_(method, path, body, extraHeaders) {
