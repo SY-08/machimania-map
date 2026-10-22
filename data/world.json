@@ -1,0 +1,13 @@
+{
+  "_説明": "全国の地図の設定です。origin（原点）と metersPerUnit（縮尺）は途中で変えないでください（お店の位置がずれます）。地図データは GitHub の Actions「地図データを作る」で作りなおせます。",
+  "title": "まちマニアMAP",
+  "origin": { "lat": 35.6, "lng": 139.6 },
+  "metersPerUnit": 40,
+  "tileSize": 2000,
+  "osmNationalRoads": ["motorway", "trunk", "primary"],
+  "osmDetailRoads": ["secondary", "tertiary"],
+  "osmDetailRadiusDeg": 0.03,
+  "borderRivers": [
+    { "code": "13209", "name": "境川", "neighbors": ["相模原市", "大和市"] }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "_説明": "あなたが登録するお店の一覧です。type が youtube なら黄色（動画で紹介したお店）、new なら赤（オープン1年以内）→1年をこえると自動で紫になります。参加者の投稿（青）はここではなく Supabase に保存されます。追加は shop-form.html を使うとかんたんです。genre は ramen / udon / cafe / sweets / izakaya / bakery / curry / sushi / yakiniku / chinese / western / other。facing は看板の向き（0=南, 90=東, 180=北, 270=西）。",
+  "shops": [
+    {
+      "id": "yt-shige-machida",
+      "type": "youtube",
+      "name": "牛すじと肉うどん 茂",
+      "genre": "udon",
+      "lat": 35.550392,
+      "lng": 139.440826,
+      "published": "2026-10-10",
+      "comment": "渋谷で53年続いたそば屋の2代目が営むうどん店。替え玉OK・そば3倍盛りも。季節の豚しゃぶつけ汁うどんに、わさびを合わせると味が変わる食べ方を紹介しています。",
+      "youtube": "https://youtu.be/sLHsq0WgeOA",
+      "address": "東京都町田市森野2-27-14 三喜ビル第5 2F",
+      "facing": 0
+    },
+    {
+      "id": "yt-mizutake-machida",
+      "type": "youtube",
+      "name": "元祖みず竹中華そば 町田店",
+      "genre": "ramen",
+      "lat": 35.541328,
+      "lng": 139.448364,
+      "published": "2026-09-22",
+      "opened": "2026-09-14",
+      "comment": "町田仲見世商店街に2026年9月にオープンした新店。煮干しの香りと白醤油のコクが広がる、町田店限定の「白」を実食。鶴川店の「黒」との違いも。",
+      "youtube": "https://youtu.be/DMGvE7gckL0",
+      "address": "東京都町田市原町田4-5-18 町田仲見世商店街",
+      "facing": 0
+    }
+  ]
+}

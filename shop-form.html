@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>まちマニアMAP お店登録</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&family=Mochiy+Pop+One&display=swap">
+<style>
+:root {
+  --ink: #3b3427; --ink-soft: #7a6f5c; --paper: #fffdf7; --paper-2: #f4efe2; --leaf: #3fae6a; --sun: #ffcf4a; --coral: #ef6f5a;
+  --shadow: rgba(59, 52, 39, 0.28);
+  --font-ui: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Yu Gothic", system-ui, sans-serif;
+  --font-logo: "Mochiy Pop One", "M PLUS Rounded 1c", sans-serif;
+  color-scheme: light;
+}
+[hidden] { display: none !important; }
+body { margin: 0; background: #e3efe9; color: var(--ink); font-family: var(--font-ui); font-size: 15px; line-height: 1.6; }
+main { max-width: 760px; margin: 0 auto; padding-block: 24px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 16px; }
+h1 { font-family: var(--font-logo); font-weight: 400; font-size: 28px; margin: 0; }
+h1 span { color: var(--leaf); }
+.lead { margin: 0; color: var(--ink-soft); }
+.panel { background: var(--paper); border: 3px solid var(--ink); border-radius: 18px; box-shadow: 0 5px 0 var(--shadow); padding: 18px; }
+form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field.wide, .wide { grid-column: 1 / -1; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.kinds { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.kinds label { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.kinds i { width: 14px; height: 14px; border-radius: 4px; border: 2px solid var(--ink); }
+.field b { font-size: 13px; }
+.field small { color: var(--ink-soft); font-size: 12px; }
+input, select, textarea { font: inherit; border: 2.5px solid var(--ink); border-radius: 12px; padding: 8px 11px; background: #fff; min-width: 0; color: inherit; }
+textarea { min-height: 72px; resize: vertical; }
+.btn { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 0 18px; border: 3px solid var(--ink); border-radius: 999px; background: var(--paper); font: inherit; font-weight: 800; box-shadow: 0 3px 0 var(--shadow); cursor: pointer; }
+.btn.primary { background: var(--leaf); color: #fff; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+#map { width: 100%; max-width: 100%; aspect-ratio: 3 / 2; border-radius: 12px; border: 2.5px solid var(--ink); background: #e8eeec; display: block; }
+.msg { padding: 8px 12px; border-radius: 12px; font-weight: 700; }
+.msg.ok { background: #dff3e6; }
+.msg.warn { background: #fff1c9; }
+.msg.err { background: #fde0da; }
+pre { margin: 0; background: #2f2a22; color: #f6f0e2; border-radius: 12px; padding: 12px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; }
+ol { margin: 0; padding-left: 1.3em; }
+ol li + li { margin-top: 4px; }
+code { background: var(--paper-2); padding: 0 5px; border-radius: 6px; }
+@media (max-width: 560px) { form, .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <h1>お店<span>登録</span></h1>
+    <p class="lead">あなたが登録するお店（黄＝動画で紹介・赤＝リサーチした新店）の情報を入れると、<code>data/shops.json</code> に貼りつける文字が作られます。参加者の投稿（青）は町の中の「投稿」ボタンから入ります。この画面は自分用です。</p>
+  </div>
+
+  <form class="panel" id="f" autocomplete="off">
+    <fieldset class="field wide kinds"><b>種類</b>
+      <label><input type="radio" name="type" value="youtube" checked> <i style="background:#f2c230"></i>まちマニア横塚・動画で紹介した（黄）</label>
+      <label><input type="radio" name="type" value="new"> <i style="background:#e2483d"></i>新店（赤 → 開店1年で紫）</label>
+    </fieldset>
+    <label class="field wide"><b>お店の名前</b><input id="name" required maxlength="40" placeholder="例：中華そば まちだ"></label>
+    <label class="field"><b>ジャンル</b>
+      <select id="genre">
+        <option value="ramen">🍜 ラーメン</option><option value="udon">🥢 うどん・そば</option><option value="cafe">☕ カフェ</option>
+        <option value="sweets">🍰 スイーツ</option><option value="izakaya">🏮 居酒屋</option><option value="bakery">🥐 パン</option>
+        <option value="curry">🍛 カレー</option><option value="sushi">🍣 寿司・和食</option><option value="yakiniku">🥩 焼肉・肉料理</option>
+        <option value="chinese">🥟 中華</option><option value="western">🍝 洋食</option><option value="other">🛍️ そのほか</option>
+      </select></label>
+    <label class="field"><b>オープン日</b><input id="opened" type="date"><small>わからなければ空のまま</small></label>
+    <label class="field wide"><b>場所（緯度, 経度）</b><input id="coords" required placeholder="35.54320, 139.45020">
+      <small>Googleマップでお店の場所を右クリック（スマホは長押し）すると出る数字をそのまま貼りつけます。</small></label>
+    <label class="field wide"><b>住所（メモ）</b><input id="address" maxlength="80" placeholder="東京都町田市原町田4-5-18"></label>
+    <div class="wide yt-only grid2">
+      <label class="field"><b>YouTube のリンク</b><input id="youtube" type="url" placeholder="https://youtu.be/xxxxxxxxxxx"></label>
+      <label class="field"><b>動画の公開日</b><input id="published" type="date"></label>
+      <label class="field wide"><b>ひとこと</b><textarea id="comment" maxlength="160" placeholder="例：煮干しの香りがすごい。平日昼でも10人並び。"></textarea></label>
+    </div>
+    <div class="wide new-only grid2" hidden>
+      <label class="field wide"><b>概要</b><textarea id="summary" maxlength="200" placeholder="何のお店か、看板メニュー、営業時間のめやす など"></textarea></label>
+      <label class="field wide"><b>背景</b><textarea id="background" maxlength="200" placeholder="前は何のお店だったか、どこの何号店か、なぜこの場所か など"></textarea></label>
+      <label class="field wide"><b>情報源のURL（1行に1つ・3つまで）</b><textarea id="sources" placeholder="https://..."></textarea></label>
+    </div>
+    <label class="field"><b>看板の向き</b>
+      <select id="facing"><option value="0">南向き（標準）</option><option value="90">東向き</option><option value="180">北向き</option><option value="270">西向き</option></select></label>
+    <div class="field" style="justify-content:flex-end"><button class="btn primary" type="submit">貼りつける文字を作る</button></div>
+  </form>
+
+  <section class="panel" id="out" hidden>
+    <canvas id="map" width="900" height="600" aria-label="お店の位置の確認"></canvas>
+    <div id="check" style="margin-top:12px"></div>
+    <h3 style="margin:16px 0 6px">いちばんかんたんな方法：ファイルを丸ごと置きかえ</h3>
+    <ol>
+      <li>下の「全部コピー」を押す</li>
+      <li>GitHub でリポジトリの <code>data/shops.json</code> を開き、えんぴつのマーク（Edit）を押す</li>
+      <li>中身を全部消して貼りつけ、「Commit changes」を押す</li>
+      <li>1〜2分後に町を開きなおすと、お店が建っています</li>
+    </ol>
+    <div class="row" style="margin:10px 0"><button class="btn primary" type="button" id="copyAll">全部コピー</button><span id="copied" class="lead"></span></div>
+    <pre id="full"></pre>
+  </section>
+</main>
+<script type="module">
+import { Projector, pointInPolys } from "./js/geo.js";
+
+const $ = (s) => document.querySelector(s);
+const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+$("#published").value = today;
+const world = await (await fetch("data/world.json", { cache: "no-cache" })).json();
+const index = await (await fetch("data/japan/index.json", { cache: "no-cache" })).json();
+const shopsFile = await (await fetch("data/shops.json", { cache: "no-cache" })).json();
+const proj = new Projector(world.origin, world.metersPerUnit);
+let fullText = "";
+
+const typeNow = () => document.querySelector("input[name=type]:checked").value;
+document.querySelectorAll("input[name=type]").forEach((r) => r.addEventListener("change", () => {
+  $(".yt-only").hidden = typeNow() !== "youtube";
+  $(".new-only").hidden = typeNow() !== "new";
+}));
+
+async function areaAt(x, z) {
+  const key = Math.floor(x / index.tileSize) + "_" + Math.floor(z / index.tileSize);
+  if (!index.tiles.includes(key)) return null;
+  const t = await (await fetch(`data/japan/tiles/${key}.json`)).json();
+  return t.munis.find((m) => pointInPolys(x, z, m.polys)) || null;
+}
+
+$("#f").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const m = $("#coords").value.match(/(-?\d+(?:\.\d+)?)\s*[,，\s]\s*(-?\d+(?:\.\d+)?)/);
+  const msgs = [];
+  if (!m) { $("#out").hidden = false; $("#check").innerHTML = `<div class="msg err">場所の数字が読めませんでした。「35.54320, 139.45020」のように貼りつけてください。</div>`; return; }
+  let lat = +m[1], lng = +m[2];
+  if (lat > 90) [lat, lng] = [lng, lat];
+  const [x, z] = proj.xz(lat, lng);
+  const area = await areaAt(x, z);
+  if (!area) msgs.push(["err", "この場所は日本の陸地ではないようです。数字を確かめてください。"]);
+  else msgs.push(["ok", `${area.pref}${area.name} に建ちます。`]);
+  const near = shopsFile.shops.filter((s) => { const [sx, sz] = proj.xz(s.lat, s.lng); return Math.hypot(sx - x, sz - z) < 6; });
+  if (near.length) msgs.push(["warn", `すぐ近くに「${near.map((s) => s.name).join("」「")}」があります。建物が重なるので、少しずらすときれいです。`]);
+  const type = typeNow();
+  const shop = {
+    id: (type === "youtube" ? "yt-" : "new-") + Date.now().toString(36),
+    type,
+    name: $("#name").value.trim(),
+    genre: $("#genre").value,
+    lat: +lat.toFixed(6), lng: +lng.toFixed(6),
+  };
+  if ($("#opened").value) shop.opened = $("#opened").value;
+  if ($("#address").value.trim()) shop.address = $("#address").value.trim();
+  if (type === "youtube") {
+    const yt = $("#youtube").value.trim();
+    if (yt && !/^https:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\//.test(yt)) msgs.push(["warn", "YouTube のリンクではないようです。"]);
+    shop.youtube = yt.replace(/[?&]si=[^&]+/, "");
+    shop.published = $("#published").value;
+    shop.comment = $("#comment").value.trim();
+  } else {
+    shop.summary = $("#summary").value.trim();
+    shop.background = $("#background").value.trim();
+    shop.sources = $("#sources").value.split(/\s+/).filter((u) => /^https:\/\//.test(u)).slice(0, 3);
+    if (!shop.opened) msgs.push(["warn", "オープン日がないと、1年たっても紫に変わりません。"]);
+  }
+  shop.facing = +$("#facing").value;
+  const next = { ...shopsFile, shops: [...shopsFile.shops.filter((s) => !s.sample), shop] };
+  if (shopsFile.shops.some((s) => s.sample)) msgs.push(["ok", "サンプルのお店は自動で外しました。"]);
+  fullText = JSON.stringify(next, null, 2) + "\n";
+  $("#full").textContent = fullText;
+  $("#check").innerHTML = msgs.map(([k, t]) => `<div class="msg ${k}" style="margin-top:6px">${t.replace(/</g, "&lt;")}</div>`).join("");
+  $("#out").hidden = false;
+  drawMap(x, z, next.shops);
+  $("#out").scrollIntoView({ behavior: "smooth" });
+});
+
+$("#copyAll").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(fullText); $("#copied").textContent = "コピーしました"; }
+  catch { const r = document.createRange(); r.selectNodeContents($("#full")); getSelection().removeAllRanges(); getSelection().addRange(r); $("#copied").textContent = "選択しました。Ctrl+C（⌘C）でコピーしてください"; }
+});
+
+function drawMap(px, pz, shops) {
+  const c = $("#map"), g = c.getContext("2d");
+  const span = 260; // ゲーム単位で 約10km 四方
+  const k = c.width / span;
+  const S = (x, z) => [(x - px) * k + c.width / 2, (z - pz) * k + c.height / 2];
+  g.fillStyle = "#bfe3f0"; g.fillRect(0, 0, c.width, c.height);
+  for (const r of index.overview.land) {
+    g.beginPath(); r.forEach((p, i) => { const [x, y] = S(p[0], p[1]); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath();
+    g.fillStyle = "#ead9b2"; g.fill(); g.strokeStyle = "#d3bf93"; g.lineWidth = 1; g.stroke();
+  }
+  for (const st of index.stations) {
+    if (Math.abs(st.p[0] - px) > span || Math.abs(st.p[1] - pz) > span) continue;
+    const [x, y] = S(st.p[0], st.p[1]);
+    g.fillStyle = "#fff"; g.strokeStyle = "#3b3427"; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 5, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = "#3b3427"; g.font = "700 16px sans-serif"; g.fillText(st.n, x + 8, y + 5);
+  }
+  for (const s of shops) {
+    const [x, y] = S(...proj.xz(s.lat, s.lng));
+    g.fillStyle = s.type === "new" ? "#e2483d" : "#f2c230"; g.strokeStyle = "#fff"; g.lineWidth = 2;
+    g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill(); g.stroke();
+  }
+  g.strokeStyle = "#3b3427"; g.lineWidth = 3;
+  g.beginPath(); g.arc(c.width / 2, c.height / 2, 14, 0, 7); g.stroke();
+}
+</script>
+</body>
+</html>

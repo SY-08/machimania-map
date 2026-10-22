@@ -1,0 +1,58 @@
+name: 地図データを作る
+
+# Actions 画面の「Run workflow」で実行します（data/world.json や tools/ を変えたときも自動で動きます）。
+# 国土数値情報（鉄道）と OpenStreetMap（道路・川）から全国の地図データを作りなおして、data/japan をコミットします。
+# 全国ぶんなので 30分〜1時間ほどかかります。
+on:
+  workflow_dispatch:
+    inputs:
+      roads:
+        description: "道路・川（auto＝OSMから取る / approx＝仮データだけ）"
+        default: "auto"
+        type: choice
+        options: [auto, approx]
+      rail:
+        description: "鉄道（auto＝国土数値情報を試す / fallback＝駅をつないだ線）"
+        default: "auto"
+        type: choice
+        options: [auto, fallback]
+  push:
+    branches: [main]
+    paths:
+      - "data/world.json"
+      - "tools/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-map
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: .cache
+          key: map-cache-${{ github.run_id }}
+          restore-keys: map-cache-
+      - name: 地図データを生成
+        run: python3 tools/build_japan.py --roads "${{ inputs.roads || 'auto' }}" --rail "${{ inputs.rail || 'auto' }}" --cache .cache
+      - name: 変わったデータをコミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "変更はありませんでした"
+          else
+            git commit -m "地図データを更新"
+            git push
+          fi
