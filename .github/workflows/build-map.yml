@@ -1,6 +1,6 @@
 name: 地図データを作る
 
-# Actions 画面の「Run workflow」で実行します（data/world.json や tools/ を変えたときも自動で動きます）。
+# Actions 画面の「Run workflow」で実行します（data/world.json や tools/build_japan.py を変えたときも自動で動きます）。
 # 国土数値情報（鉄道）と OpenStreetMap（道路・川）から全国の地図データを作りなおして、data/japan をコミットします。
 # 全国ぶんなので 30分〜1時間ほどかかります。
 on:
@@ -20,7 +20,7 @@ on:
     branches: [main]
     paths:
       - "data/world.json"
-      - "tools/**"
+      - "tools/build_japan.py"
 
 permissions:
   contents: write
