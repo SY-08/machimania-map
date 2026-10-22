@@ -137,8 +137,10 @@ function updateShopStatuses() {
   if (last < 2) return;
   const h = SHEETS.shops.headers;
   const opened = sh.getRange(2, h.indexOf("開店日") + 1, last - 1, 1).getValues();
+  const ids = sh.getRange(2, 1, last - 1, 1).getValues();
   const now = new Date();
-  const status = opened.map(([d]) => {
+  const status = opened.map(([d], i) => {
+    if (!ids[i][0]) return [""];
     const t = d instanceof Date ? d : (d ? new Date(String(d).replace(/\./g, "-")) : null);
     if (!t || isNaN(t)) return ["新店（開店日不明）"];
     if (t > now) return ["オープン前"];
@@ -352,8 +354,8 @@ function readRows_(sh, def) {
 function checkboxes_(def, header) {
   const sh = sheet_(def);
   const col = def.headers.indexOf(header) + 1;
-  const n = Math.max(1, sh.getLastRow() - 1);
-  sh.getRange(2, col, n, 1).insertCheckboxes();
+  if (sh.getLastRow() < 2) return;   // 行がないうちはチェックボックスを置かない（空行のあとに追記されてしまうため）
+  sh.getRange(2, col, sh.getLastRow() - 1, 1).insertCheckboxes();
 }
 
 function norm_(s) { return String(s || "").replace(/\s+/g, "").toLowerCase(); }
