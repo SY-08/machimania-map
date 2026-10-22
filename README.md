@@ -126,7 +126,7 @@
 1. スプレッドシートで「拡張機能」→「Apps Script」→ `apps-script/Code.gs` の中身を全部貼って保存
 2. 左の歯車「プロジェクトの設定」→「スクリプト プロパティ」に4つ追加
    - `GITHUB_REPO`：`（ユーザー名）/machimania-map`
-   - `GITHUB_TOKEN`：GitHub の Settings → Developer settings → Fine-grained tokens で、このリポジトリだけ・Contents を Read and write にしたトークン
+   - `GITHUB_TOKEN`（なくても動きます。入れるとシートの変更が翌朝を待たずにすぐMAPに出ます）：GitHub の Settings → Developer settings → Fine-grained tokens で、このリポジトリだけ・Contents を Read and write にしたトークン
    - `SUPABASE_URL`：Supabase の Project URL
    - `SUPABASE_SERVICE_KEY`：Supabase の Project Settings → API の **service_role** key（ここ以外には貼らない）
 3. 関数 `setup` を選んで「実行」→ Google の許可画面で許可
@@ -134,7 +134,7 @@
 
 ### 毎日の新店リサーチ
 
-毎朝5時台に Claude のスケジュール実行が全国の新店を調べ、信頼できる情報源・住所・開店日がそろったものだけを `data/research-inbox.json` に追加します（指示文は `tools/daily-research-prompt.md`）。7時台に Apps Script がそれを「新店」シートに取りこみ、表示チェックのついた行を `data/research.json` に書き出すと、GitHub Pages が更新されて MAP に赤いお店が建ちます。開店日から1年たつと、MAPでもシートでも自動で紫（1年以上）になります。
+毎朝5時台に Claude のスケジュール実行が、まずシートの「新店」（表示にチェックの行）を `data/research.json` に書き出してから、全国の新店を調べ、信頼できる情報源・住所・開店日がそろったものだけを `data/research-inbox.json` に追加します（指示文は `tools/daily-research-prompt.md`）。7時台に Apps Script がそれを「新店」シートに取りこみ、表示チェックのついた行を `data/research.json` に書き出すと、GitHub Pages が更新されて MAP に赤いお店が建ちます。開店日から1年たつと、MAPでもシートでも自動で紫（1年以上）になります。
 
 ## 6. 地図をくわしくする（GitHub Actions）
 

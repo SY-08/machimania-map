@@ -54,6 +54,7 @@ function setup() {
     first.setValues([def.headers]).setFontWeight("bold").setBackground("#f4efe2");
     sh.setFrozenRows(1);
   }
+  ss.setActiveSheet(ss.getSheetByName(SHEETS.shops.name)); ss.moveActiveSheet(1);   // 「新店」を先頭に（毎朝のリサーチが先頭シートを読む）
   const old = ss.getSheetByName("シート1");
   if (old && old.getLastRow() <= 1 && ss.getSheets().length > 1) ss.deleteSheet(old);
   // チェックボックス
@@ -84,11 +85,15 @@ function onOpen() {
 
 // ===================================================================== 新店
 function dailyShops() {
-  if (!props_().GITHUB_TOKEN) { log_("新店", "GITHUB_TOKEN が未設定のため取りこみをとばしました"); updateShopStatuses(); return; }
   const added = importResearchInbox();
   updateShopStatuses();
-  const n = publishResearch();
-  log_("新店", `取りこみ ${added} 件 / MAPに表示 ${n} 件`);
+  // GITHUB_TOKEN があればすぐMAPに書き出す。なければ、毎朝のリサーチ（Claude）がこのシートを読んで書き出す
+  if (props_().GITHUB_TOKEN) {
+    const n = publishResearch();
+    log_("新店", `取りこみ ${added} 件 / MAPに表示 ${n} 件`);
+  } else {
+    log_("新店", `取りこみ ${added} 件（MAPへの反映は翌朝のリサーチ時）`);
+  }
 }
 
 /** GitHub の受け箱から新しいお店を取りこむ（同じIDや、同じ店名＋住所は取りこまない） */
@@ -285,6 +290,13 @@ function github_(method, path, body) {
 }
 
 function githubGetJson_(path) {
+  if (!props_().GITHUB_TOKEN) {
+    // 公開リポジトリなので、鍵がなくても読むだけならできる
+    const res = UrlFetchApp.fetch(`https://raw.githubusercontent.com/${props_().GITHUB_REPO}/main/${path}?t=${Date.now()}`, { muteHttpExceptions: true });
+    if (res.getResponseCode() === 404) return null;
+    if (res.getResponseCode() >= 300) throw new Error("GitHub 読み込み失敗 " + res.getResponseCode());
+    return JSON.parse(res.getContentText("UTF-8"));
+  }
   const r = github_("GET", path);
   if (r.code === 404) return null;
   if (r.code >= 300) throw new Error("GitHub 読み込み失敗 " + r.code);
