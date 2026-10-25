@@ -601,7 +601,7 @@ async function boot() {
     });
   });
   $("#btnAvatar").addEventListener("click", () => openAvatarEditor({
-    name: profile.name, avatar: profile.avatar, nameLocked: true,
+    name: profile.name, avatar: profile.avatar, nameLocked: true, official: !!net.isOfficial?.(net.id),
     nameNote: isMember() ? "ニックネーム（ログイン名）は変えられません" : "登録するとニックネームが名前になります",
     onSave: async (name, avatar) => {
       profile = { name: profile.name, avatar };

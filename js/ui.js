@@ -324,7 +324,7 @@ export function postFormHTML({ here, online, nickname, guide }) {
 }
 
 
-export function openAvatarEditor({ name = "", avatar, firstTime = false, nameLocked = false, nameNote = "", saveLabel = "", onSave }) {
+export function openAvatarEditor({ name = "", avatar, firstTime = false, nameLocked = false, nameNote = "", saveLabel = "", official = false, onSave }) {
   let cfg = sanitizeAvatar(avatar);
   const o = AVATAR_OPTIONS;
   const sw = (key, list) => `<div class="swatches" data-key="${key}">${list.map((c) => `<button type="button" class="sw" style="background:${c}" data-v="${c}" aria-label="${c}" aria-pressed="${cfg[key] === c}"></button>`).join("")}</div>`;
@@ -366,7 +366,8 @@ export function openAvatarEditor({ name = "", avatar, firstTime = false, nameLoc
   const cam = new THREE.PerspectiveCamera(30, 400 / 530, 0.1, 50);
   cam.position.set(0, 1.9, 7.4);
   cam.lookAt(0, 1.45, 0);
-  const av = new Avatar(cfg, "", { showName: false, navi: false });
+  const av = new Avatar(cfg, "", { showName: false, navi: false, official });
+  if (av.star) av.star.visible = false;
   scene.add(av.group);
   let running = true, t0 = performance.now();
   const loop = () => {

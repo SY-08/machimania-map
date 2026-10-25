@@ -39,13 +39,7 @@ export function sanitizeAvatar(a) {
   };
 }
 
-// まちマニア横塚さん専用のすがた（★の公式アカウントだけに使われ、参加者は選べない）
-// 見た目を本人に寄せるときは、ここの値を変える
-export const OWNER_LOOK = {
-  skin: "#f3c9a5", hair: "short", hairColor: "#2b2420", eyes: "smile", mouth: "smile",
-  shirt: "#f2b632", pants: "#3d4f6b", height: 1.04, glasses: true,
-};
-
+// まちマニア横塚さん（★公式）は、自分でえらんだ見た目のまま、公式だけの目印（首から下げたカメラ・★・金色のナビ・金の名札）がつく
 const HEAD_R = 0.62;
 
 // 公式アカウントだけが持つ、首から下げたカメラ（お店を撮りに行く人の目印）
@@ -236,9 +230,6 @@ export class Avatar {
 
   setConfig(cfg, name = this.name) {
     this.cfg = sanitizeAvatar(cfg);
-    this.ownCfg = this.cfg;
-    // 公式アカウントは、えらんだ見た目にかかわらず専用のすがたになる
-    if (this.official) this.cfg = sanitizeAvatar(OWNER_LOOK);
     this.name = name;
     while (this.root.children.length) this.root.remove(this.root.children[0]);
     const c = this.cfg;
@@ -313,7 +304,7 @@ export class Avatar {
     if (this.official === !!on) return;
     this.official = !!on;
     if (this.navi) this.navi.setGold(this.official);
-    this.setConfig(this.ownCfg || this.cfg, this.name);
+    this.setConfig(this.cfg, this.name);
   }
 
   // 場面に出す・しまう（ナビもいっしょに）

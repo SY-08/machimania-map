@@ -45,7 +45,13 @@ export class LocalNet extends Emitter {
     this.accountInfo = acc ? { member: true, accountId: acc.id, nickname: acc.nickname } : { member: false };
     return { ...this.accountInfo, profile: acc ? { name: acc.nickname, avatar: acc.avatar } : null };
   }
-  account() { return this.accountInfo || { member: false }; }
+  account() {
+    if (!this._watching) {
+      this._watching = true;
+      addEventListener("storage", (e) => { if (e.key === LOCAL_SESSION) location.reload(); });   // 別のタブでログインしたらそろえる
+    }
+    return this.accountInfo || { member: false };
+  }
   async register(nick, pass, avatar) {
     const bad = checkNick(nick) || checkPass(pass);
     if (bad) throw new Error(bad);
@@ -302,7 +308,9 @@ export class SupabaseNet extends Emitter {
     this.id = this.user.id;
     // private チャンネルに入るため、ログイン中の鍵をリアルタイム接続にも渡す
     await this.client.realtime.setAuth(session.access_token);
-    this.client.auth.onAuthStateChange((_e, s) => {
+    this.client.auth.onAuthStateChange((ev, s) => {
+      // 別のタブで登録・ログイン・ログアウトしたら、このタブも読み込み直してそろえる
+      if ((ev === "SIGNED_IN" || ev === "SIGNED_OUT") && (s?.user?.id || null) !== (this.id || null) && this._ready && !this._selfAuth) { location.reload(); return; }
       if (s?.access_token) this.client.realtime.setAuth(s.access_token);
       if (s?.user) { this.user = s.user; this.emit("account", this.account()); }
     });
@@ -312,6 +320,7 @@ export class SupabaseNet extends Emitter {
       ({ data: prof } = await this.client.from("profiles").select("name, avatar").eq("id", this.id).maybeSingle());
       this.nickname = prof?.name || this.user.user_metadata?.nickname || null;
     }
+    this._ready = true;
     return { id: this.id, profile: prof || null, ...this.account() };
   }
 
@@ -323,6 +332,7 @@ export class SupabaseNet extends Emitter {
     if (bad) throw new Error(bad);
     nick = nick.replace(/\s+/g, " ").trim();
     const email = await nickToLoginId(nick, this.cfg.accountIdDomain);
+    this._selfAuth = true;
     const { data, error } = await this.client.auth.signUp({ email, password: pass, options: { data: { nickname: nick } } });
     if (error) {
       if (/already|registered|exists/i.test(error.message)) throw new Error("そのニックネームはもう使われています。別のニックネームにしてください");
@@ -342,6 +352,7 @@ export class SupabaseNet extends Emitter {
 
   async login(nick, pass) {
     const email = await nickToLoginId(nick, this.cfg.accountIdDomain);
+    this._selfAuth = true;
     const { error } = await this.client.auth.signInWithPassword({ email, password: pass });
     if (error) throw new Error(/invalid/i.test(error.message) ? "ニックネームかパスワードがちがいます" : "ログインできませんでした（" + error.message + "）");
   }
@@ -514,7 +525,7 @@ export class SupabaseNet extends Emitter {
     return { ok: true };
   }
 
-  async logout() { await this.client.auth.signOut(); location.reload(); }
+  async logout() { this._selfAuth = true; await this.client.auth.signOut(); location.reload(); }
 
   // ---------- みんなの投稿
   publicUrl(path) { return path ? this.client.storage.from(BUCKET).getPublicUrl(path).data.publicUrl : null; }
