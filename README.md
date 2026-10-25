@@ -134,7 +134,7 @@
    - `GITHUB_REPO`：`（ユーザー名）/machimania-map`
    - `GITHUB_TOKEN`（なくても動きます。入れるとシートの変更が翌朝を待たずにすぐMAPに出ます）：GitHub の Settings → Developer settings → Fine-grained tokens で、このリポジトリだけ・Contents を Read and write にしたトークン
    - `SUPABASE_URL`：Supabase の Project URL
-   - `SUPABASE_SERVICE_KEY`：Supabase の Project Settings → API の **service_role** key（ここ以外には貼らない）
+   - `SUPABASE_SERVICE_KEY`：Supabase の Project Settings → API Keys の **Secret key**（`sb_secret_…`。ここ以外には貼らない）
 3. 関数 `setup` を選んで「実行」→ Google の許可画面で許可
 4. 以後、毎朝7時台に新店、1時間ごとに投稿・アカウントが自動更新。シートの「まちマニアMAP」メニューから今すぐ実行もできます
 
