@@ -14,7 +14,7 @@
  *       GITHUB_REPO          例: SY-08/machimania-map
  *       GITHUB_TOKEN         GitHub の「Fine-grained token」（このリポジトリの Contents: Read and write）
  *       SUPABASE_URL         例: https://xxxx.supabase.co
- *       SUPABASE_SERVICE_KEY Supabase の service_role key（ぜったいに公開しない）
+ *       SUPABASE_SERVICE_KEY Supabase の Secret key（sb_secret_…。ぜったいに公開しない）
  *   - 関数「setup」を1回実行（シートと、毎日・毎時の自動実行が作られます）
  */
 
@@ -347,7 +347,9 @@ function supa_(method, path, body, extraHeaders) {
   const p = props_();
   const res = UrlFetchApp.fetch(p.SUPABASE_URL.replace(/\/$/, "") + path, {
     method, muteHttpExceptions: true, contentType: "application/json",
-    headers: Object.assign({ apikey: p.SUPABASE_SERVICE_KEY, Authorization: "Bearer " + p.SUPABASE_SERVICE_KEY, Prefer: "return=minimal" }, extraHeaders || {}),
+    // 新しい形式の鍵（sb_secret_…）は apikey だけで送る。古い形式（eyJ…）は Authorization にも入れる
+    headers: Object.assign({ apikey: p.SUPABASE_SERVICE_KEY, Prefer: "return=minimal" },
+      /^eyJ/.test(p.SUPABASE_SERVICE_KEY) ? { Authorization: "Bearer " + p.SUPABASE_SERVICE_KEY } : {}, extraHeaders || {}),
     payload: body ? JSON.stringify(body) : undefined,
   });
   const code = res.getResponseCode();

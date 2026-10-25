@@ -4,8 +4,8 @@
 // 空のままだと「テストモード」で動きます（同じブラウザの別タブ同士＋テスト住人だけ）。
 // anon key は公開しても大丈夫な鍵です（データの守りは schema.sql の RLS で行っています）。
 export const CONFIG = {
-  supabaseUrl: "",       // 例: "https://abcdefghijkl.supabase.co"
-  supabaseAnonKey: "",   // 例: "eyJhbGciOi..."
+  supabaseUrl: "https://bhjadspglgrlwfqsnimq.supabase.co",
+  supabaseAnonKey: "sb_publishable_LsbNRuAqI4gPM-JYEDfNhA_DIgbWz1Y",   // 公開してよい鍵（Publishable key）
 
   // 位置とチャットは、同じ地域（地図のタイル1枚＝約80km四方）にいる人どうしだけでやり取りします（自動）。
   // 全国の同時接続がこの人数をこえたら、新しく来た人は「入室待ち」になります（Supabase 無料プランの上限は200）

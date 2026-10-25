@@ -266,7 +266,7 @@ export class LocalNet extends Emitter {
 }
 
 // ====================================================================== 本番用（Supabase）
-const SUPABASE_JS = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js";
+const SUPABASE_JS = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.min.js";
 
 function loadScript(src) {
   return new Promise((res, rej) => {
