@@ -124,12 +124,17 @@ async function boot() {
   renderer.render(scene, camera);
 
   const isMember = () => !!account?.member;
+  let guestMode = false;
   // 登録・ログイン画面（ニックネーム＋パスワード。メールアドレスはいらない）
   function joinDialog(message = "", { first = false } = {}) {
     return new Promise((resolve) => {
       const m = openModal(`
-        <h2>${first ? "ようこそ、まちマニアMAPへ" : "アカウント"}</h2>
-        <p class="lead">${esc(message || "ニックネームとパスワードだけで参加できます。メールアドレスはいりません。")}</p>
+        <h2>${first ? "ようこそ、まちマニアMAPへ" : (message ? esc(message) : "アカウントをつくる")}</h2>
+        <div class="join-easy">
+          <b>ニックネームとパスワードだけで、いますぐ登録できます</b>
+          <span>メールアドレスや電話番号はいりません。1分ほどで終わります。</span>
+        </div>
+        ${first ? `<p class="lead">登録すると、チャットで話したり、行ったお店の口コミを投稿したりできます。</p>` : ""}
         <div class="join-tabs" role="tablist">
           <button class="btn" type="button" data-tab="new" aria-pressed="true">はじめて（アカウントをつくる）</button>
           <button class="btn" type="button" data-tab="login" aria-pressed="false">ログイン</button>
@@ -199,6 +204,7 @@ async function boot() {
     const g = store.get("guestAvatar") || randomAvatar();
     store.set("guestAvatar", g);
     profile = { name: "ゲスト", avatar: g };
+    guestMode = true;
   }
   store.set("profile", profile);
 
@@ -320,7 +326,7 @@ async function boot() {
     const input = $("#chatInput");
     const text = cleanText(input.value);
     if (!text) return;
-    if (!isMember()) { openJoin("チャットするには、ニックネームとパスワードでアカウントをつくってください"); return; }
+    if (!isMember()) { openJoin("チャットするには、アカウントをつくってください"); return; }
     const err = limiter.check();
     if (err) { toast(err); return; }
     input.value = "";
@@ -329,7 +335,7 @@ async function boot() {
   });
   $("#stampPanel").innerHTML = STAMPS.map((s) => `<button type="button" class="stamp-btn" data-stamp="${s.id}">${s.emoji}<span>${s.label}</span></button>`).join("");
   $("#stampPanel").addEventListener("click", async (e) => {
-    if (!isMember() && e.target.closest("[data-stamp]")) { openJoin("スタンプを送るには、ニックネームとパスワードでアカウントをつくってください"); return; }
+    if (!isMember() && e.target.closest("[data-stamp]")) { openJoin("スタンプを送るには、アカウントをつくってください"); return; }
     const b = e.target.closest("[data-stamp]");
     if (!b) return;
     const err = limiter.check();
@@ -630,7 +636,7 @@ async function boot() {
   async function refreshMyPosts() {
     const chip = $("#myPosts");
     if (!chip) return;
-    if (!isMember()) { chip.textContent = "📝 登録して投稿"; return; }
+    if (!isMember()) { chip.textContent = "📝 かんたん登録で投稿"; return; }
     const n = await net.myPostCount().catch(() => null);
     if (n != null) chip.textContent = `📝 あなたの投稿 ${n}件`;
   }
@@ -642,7 +648,7 @@ async function boot() {
     $("#rankList", m.el).innerHTML = list.length ? list.map((r, i) => `<li class="${r.userId && r.userId === myId ? "me" : ""}"><span class="no">${medal[i] || i + 1}</span><span>${net.isOfficial?.(r.userId) ? "★ " : ""}${esc(r.name || "だれか")}</span><span class="n">${r.posts}件</span></li>`).join("")
       : `<li>まだ投稿がありません。最初の1件を投稿してみませんか？</li>`;
   }
-  $("#myPosts")?.addEventListener("click", () => (isMember() ? openRanking() : openJoin("投稿するには、ニックネームとパスワードでアカウントをつくってください")));
+  $("#myPosts")?.addEventListener("click", () => (isMember() ? openRanking() : openJoin("お店を投稿するには、アカウントをつくってください")));
 
   function openHelp() {
     const approx = !index.roadsFromOsm.length;
@@ -1128,7 +1134,7 @@ async function boot() {
   }
 
   function openPostForm() {
-    if (!isMember()) { openJoin("投稿するには、ニックネームとパスワードでアカウントをつくってください"); return; }
+    if (!isMember()) { openJoin("お店を投稿するには、アカウントをつくってください"); return; }
     const [lat, lng] = proj.latlng(me.x, me.z);
     const area = W.areaAt(me.x, me.z);
     const here = `${area ? area.pref + area.name + "・" : ""}${lat.toFixed(5)}, ${lng.toFixed(5)}`;
@@ -1213,6 +1219,12 @@ async function boot() {
 
 
   logSystem(net.mode === "online" ? "オンラインでつながりました" : "テストモードです（別のタブで開くと、もう1人として会えます）");
+  // ゲストには、登録のかんたんさを伝える
+  if (!isMember()) {
+    $("#chatInput").placeholder = "登録するとチャットできます（ニックネームとパスワードだけ）";
+    logSystem("いまはゲスト（見学）です。ニックネームとパスワードだけで、いつでも登録できます。登録するとチャットとお店の投稿ができます");
+    if (guestMode) setTimeout(() => toast("ゲストで見学中です。ニックネームとパスワードだけで登録すると、チャットと投稿ができます（右上の🔑から）", 7000), 2500);
+  }
   setupModesAndPosts();
   // はじめての人には、ナビが使い方を案内する
   if (!store.get("welcomed")) {
