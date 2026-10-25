@@ -247,7 +247,7 @@ export function shopCardHTML(o, nearestStation, opts = {}) {
     if (s.createdAt) tags.push(`<span class="tag">投稿 ${esc(fmtDate(s.createdAt))}</span>`);
     if (s.pending) tags.push(`<span class="tag" style="background:var(--sun)">審査待ち（あなたにだけ見えています）</span>`);
     if (s.local) tags.push(`<span class="tag" style="background:var(--sun)">テスト投稿</span>`);
-    body = `${s.comment ? `<p>${esc(s.comment)}</p>` : ""}<p class="src">ニックネーム：${esc(s.author || "だれか")}</p>`;
+    body = `${s.comment ? `<p class="review"><b>口コミ</b>　${esc(s.comment)}</p>` : ""}<p class="src">${esc(s.author || "だれか")} さんの口コミ</p>`;
     actions = [
       sns ? `<button class="btn sns" type="button" data-act="sns">${esc(sns.emoji)} ${esc(sns.label)}の投稿を見る</button>` : "",
       !sns && s.videoUrl ? `<a class="btn yt" href="${esc(safeUrl(s.videoUrl))}" target="_blank" rel="noopener">▶ 動画を見る</a>` : "",
@@ -295,14 +295,13 @@ export function shopListHTML(objs, stationOf, mode) {
 }
 
 // ---------------------------------------------------------------- 投稿フォーム
-export function postFormHTML({ here, online, nickname }) {
+export function postFormHTML({ here, online, nickname, guide }) {
   const genres = Object.entries(GENRES).map(([k, g]) => `<option value="${k}">${g.emoji} ${g.label}</option>`).join("");
   return `
     <h2>お店を投稿する</h2>
-    <p class="lead">あなたが行ったお店を、みんなのMAPに建てられます。<b>おすすめは、自分のSNS投稿（写真・動画）のリンクを貼る方法</b>です。写真や動画はSNSに置いたまま、ここに表示されます。${online ? "投稿すると、すぐにみんなの町に建ちます。" : "いまはテストモードなので、この端末にだけ保存されます。"}</p>
+    <p class="lead">あなたが行ったお店の<b>口コミ</b>を書くと、みんなのMAPに青いお店が建ちます。自分のSNS投稿（写真・動画）のリンクも貼ると、より伝わります。${online ? "投稿すると、すぐにみんなの町に建ちます。" : "いまはテストモードなので、この端末にだけ保存されます。"}</p>
     <form id="postForm" class="post-form" autocomplete="off">
-      <label class="field"><b>ニックネーム（必須）</b><input type="text" id="pNick" maxlength="12" required value="${esc(nickname || "")}" placeholder="例：ラーメン好きのたろう">
-        <small>本名や学校名は入れないでください。投稿と一緒に表示されます。</small></label>
+      <p class="note">投稿者：<b>${esc(nickname || "")}</b></p>
       <label class="field"><b>お店の名前（必須）</b><input type="text" id="pName" maxlength="40" required placeholder="例：中華そば まちだ"></label>
       <label class="field"><b>ジャンル</b><select id="pGenre">${genres}</select></label>
       <fieldset class="field"><legend><b>場所</b></legend>
@@ -310,24 +309,22 @@ export function postFormHTML({ here, online, nickname }) {
         <label class="radio"><input type="radio" name="pWhere" value="coords"> 緯度・経度を入れる</label>
         <input type="text" id="pCoords" placeholder="35.54132, 139.44836（Googleマップで右クリック）" hidden>
       </fieldset>
-      <fieldset class="field how"><legend><b>投稿のしかた</b></legend>
-        <label class="radio big"><input type="radio" name="pHow" value="sns" checked> <span><b>SNS投稿のリンクを貼る（おすすめ）</b><small>青いお店（参加者投稿）になります</small></span></label>
-        <label class="radio big"><input type="radio" name="pHow" value="text"> <span><b>文字だけで口コミを書く</b><small>SNSに投稿していないとき。こちらも青いお店になります</small></span></label>
-      </fieldset>
-      <div class="field sns-only">
-        <label class="field"><b>SNS投稿のリンク</b><input type="url" id="pSns" placeholder="https://www.instagram.com/p/…">
-          <small>Instagram・TikTok・YouTube・X・Facebook・Threads の<b>公開</b>投稿。投稿の「共有」→「リンクをコピー」で取れます。</small></label>
+      <label class="field"><b>口コミ（必須・10文字以上）</b><textarea id="pComment" maxlength="200" required placeholder="食べたもの・味・量・値段・接客・お店の雰囲気・混み具合など、行ってわかったことを書いてください"></textarea>
+        <small id="pCommentNote">${esc(guide || "")}</small>
+        <span class="count" id="pCount">0 / 200</span></label>
+      <div class="review-check" id="pReviewCheck" hidden></div>
+      <div class="field sns-box">
+        <label class="field"><b>SNS投稿のリンク（おすすめ・なくてもOK）</b><input type="url" id="pSns" placeholder="https://www.instagram.com/p/…">
+          <small>同じお店の写真・動画を Instagram・TikTok・YouTube・X・Facebook・Threads に<b>公開</b>で投稿していたら、その投稿の「共有」→「リンクをコピー」で貼ってください。口コミと一緒に表示されます。</small></label>
         <div class="sns-check" id="pSnsCheck" hidden></div>
       </div>
-      <label class="field"><b id="pCommentLabel">ひとこと（なくても大丈夫）</b><textarea id="pComment" maxlength="200" placeholder="おすすめのメニューや、お店の雰囲気など"></textarea>
-        <small id="pCommentNote">お店への悪口や、本当かわからないことは書かないでください。</small></label>
-      <label class="radio"><input type="checkbox" id="pAgree" required> 自分が行ったお店で、お店や他の人に迷惑がかからない内容です</label>
+      <label class="radio"><input type="checkbox" id="pAgree" required> 自分が行ったお店の、自分の感想です</label>
       <div class="row-end"><button class="btn primary" type="submit" id="pSend">投稿する</button></div>
     </form>`;
 }
 
 
-export function openAvatarEditor({ name = "", avatar, firstTime = false, onSave }) {
+export function openAvatarEditor({ name = "", avatar, firstTime = false, nameLocked = false, nameNote = "", saveLabel = "", onSave }) {
   let cfg = sanitizeAvatar(avatar);
   const o = AVATAR_OPTIONS;
   const sw = (key, list) => `<div class="swatches" data-key="${key}">${list.map((c) => `<button type="button" class="sw" style="background:${c}" data-v="${c}" aria-label="${c}" aria-pressed="${cfg[key] === c}"></button>`).join("")}</div>`;
@@ -338,7 +335,7 @@ export function openAvatarEditor({ name = "", avatar, firstTime = false, onSave 
     <div class="editor">
       <canvas class="preview" id="avPreview" width="400" height="530"></canvas>
       <div class="opts">
-        <label class="field"><b>なまえ（12文字まで）</b><input type="text" id="avName" maxlength="12" value="${esc(name)}" placeholder="例：まちあるきの人"></label>
+        <label class="field"><b>なまえ（12文字まで）</b><input type="text" id="avName" maxlength="12" value="${esc(name)}" placeholder="例：まちあるきの人" ${nameLocked ? "readonly" : ""}>${nameNote ? `<small>${esc(nameNote)}</small>` : ""}</label>
         <section class="face-photo">
           <button type="button" class="btn" id="avPhotoBtn">📷 顔写真から似せてつくる</button>
           <input type="file" id="avPhoto" accept="image/*" hidden>
@@ -356,7 +353,7 @@ export function openAvatarEditor({ name = "", avatar, firstTime = false, onSave 
       </div>
     </div>
     <p class="note">名前に本名や学校名などの個人情報は入れないでください。</p>
-    <div class="row-end"><button class="btn primary" type="button" id="avSave">${firstTime ? "町に出かける" : "これにする"}</button></div>`;
+    <div class="row-end"><button class="btn primary" type="button" id="avSave">${esc(saveLabel || (firstTime ? "町に出かける" : "これにする"))}</button></div>`;
   const m = openModal(html, { dismissable: !firstTime, onClose: () => { running = false; renderer.dispose(); } });
   const canvas = $("#avPreview", m.el);
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });

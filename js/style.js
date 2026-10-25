@@ -45,6 +45,7 @@ export const MODES = {
   standard:  { label: "スタンダード", kinds: ["youtube", "new", "old", "community"], note: "すべてのお店" },
   research:  { label: "新規出店収集", kinds: ["new", "old"], note: "新店（赤）と、開店1年以上（紫）" },
   community: { label: "みんなでつくるMAP", kinds: ["youtube", "community"], note: "まちマニア横塚（黄）と、参加者投稿（青）" },
+  ranking:   { label: "投稿ランキング", kinds: ["community"], note: "口コミ投稿の多い人のランキングと、参加者投稿（青）" },
 };
 
 const DAY = 86400000;

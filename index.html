@@ -339,6 +339,19 @@ kbd { display: inline-block; border: 2px solid var(--ink); border-bottom-width: 
 .sns-check { font-size: 12.5px; font-weight: 800; padding: 6px 10px; border-radius: 10px; }
 .sns-check.ok { background: #dff3e6; }
 .sns-check.ng { background: #fde0da; }
+.review-check { font-size: 12.5px; font-weight: 800; padding: 8px 10px; border-radius: 10px; background: #fde0da; line-height: 1.5; }
+.post-form .count { align-self: flex-end; font-size: 11px; opacity: .6; }
+.sns-box { padding: 10px; border-radius: 12px; background: color-mix(in srgb, var(--sky, #5fb6e8) 14%, transparent); }
+.shop-body .review { white-space: pre-wrap; }
+.join-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.join-tabs button { flex: 1; }
+.join-tabs button[aria-pressed="true"] { background: var(--ink, #3b3427); color: #fff; }
+.rank-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 55vh; overflow: auto; }
+.rank-list li { display: grid; grid-template-columns: 2.4em 1fr auto; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.7); font-weight: 700; }
+.rank-list li.me { outline: 3px solid var(--sun, #ffd166); }
+.rank-list .no { font-size: 18px; text-align: center; }
+.rank-list .n { font-variant-numeric: tabular-nums; }
+.my-posts { cursor: pointer; }
 .post-form .how { display: flex; flex-direction: column; gap: 8px; }
 .post-form .radio.big { border: 2.5px solid var(--ink); border-radius: 12px; padding: 8px 10px; background: #fff; }
 .post-form .radio.big span { display: flex; flex-direction: column; }
@@ -412,11 +425,13 @@ kbd { display: inline-block; border: 2px solid var(--ink); border-bottom-width: 
   <div class="chips">
     <span class="chip" id="areaChip">読み込み中…</span>
     <span class="chip" id="netChip"><i class="dot"></i><span>接続中…</span></span>
+    <button type="button" class="chip my-posts" id="myPosts">📝 投稿</button>
   </div>
   <div class="modebar panel" id="modeBar" role="group" aria-label="モード">
     <button type="button" data-mode="standard" aria-pressed="true"><span class="l">スタンダード</span><span class="s">すべて</span></button>
     <button type="button" data-mode="research" aria-pressed="false"><span class="l">新規出店収集</span><span class="s">新店</span></button>
     <button type="button" data-mode="community" aria-pressed="false"><span class="l">みんなでつくる</span><span class="s">みんな</span></button>
+    <button type="button" data-mode="ranking" aria-pressed="false"><span class="l">投稿ランキング</span><span class="s">ランキング</span></button>
   </div>
   <div class="legend chipline" id="legend"></div>
 </div>

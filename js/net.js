@@ -3,9 +3,14 @@
 //  - LocalNet:    設定前のテスト用。同じブラウザの別タブ同士＋テスト住人（NPC）で動く
 
 import { blobToDataURL } from "./media.js";
+import { normNick, nickToLoginId, hashPassLocal, checkNick, checkPass } from "./account.js";
 
 const BUCKET = "community";
 const LOCAL_POSTS = "machimania.community";
+const LOCAL_ACCOUNTS = "machimania.accounts";
+const LOCAL_SESSION = "machimania.session";
+const lsGet = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* なし */ } };
 
 class Emitter {
   constructor() { this.handlers = {}; }
@@ -32,6 +37,51 @@ export class LocalNet extends Emitter {
   }
 
   isOfficial(id) { return id === this.id ? this.selfOfficial : !!this.peers.get(id)?.official; }
+
+  // ---------- アカウント（テストモード：この端末の中だけ。パスワードはハッシュにして保存）
+  async init() {
+    const sess = lsGet(LOCAL_SESSION, null);
+    const acc = sess && lsGet(LOCAL_ACCOUNTS, {})[sess.key];
+    this.accountInfo = acc ? { member: true, accountId: acc.id, nickname: acc.nickname } : { member: false };
+    return { ...this.accountInfo, profile: acc ? { name: acc.nickname, avatar: acc.avatar } : null };
+  }
+  account() { return this.accountInfo || { member: false }; }
+  async register(nick, pass, avatar) {
+    const bad = checkNick(nick) || checkPass(pass);
+    if (bad) throw new Error(bad);
+    const all = lsGet(LOCAL_ACCOUNTS, {}), key = normNick(nick);
+    if (all[key]) throw new Error("そのニックネームはもう使われています。別のニックネームにしてください");
+    if (/まちマニア|横塚|マチマニア/.test(nick) && !this.selfOfficial) throw new Error("その名前は使えません（まちマニア横塚さん本人だけが使える名前です）");
+    const salt = uid();
+    all[key] = { id: "acc-" + uid(), nickname: nick.trim(), salt, hash: await hashPassLocal(pass, salt), avatar, created: new Date().toISOString() };
+    lsSet(LOCAL_ACCOUNTS, all);
+    lsSet(LOCAL_SESSION, { key });
+  }
+  async login(nick, pass) {
+    const all = lsGet(LOCAL_ACCOUNTS, {}), key = normNick(nick), acc = all[key];
+    if (!acc || acc.hash !== await hashPassLocal(pass, acc.salt)) throw new Error("ニックネームかパスワードがちがいます");
+    lsSet(LOCAL_SESSION, { key });
+  }
+  async logout() { try { localStorage.removeItem(LOCAL_SESSION); } catch { /* なし */ } location.reload(); }
+  async updateProfile(me) {
+    this.me = me;
+    const sess = lsGet(LOCAL_SESSION, null), all = lsGet(LOCAL_ACCOUNTS, {});
+    if (sess && all[sess.key]) { all[sess.key].avatar = me.avatar; lsSet(LOCAL_ACCOUNTS, all); }
+    this._post({ t: "hello", info: this._info() });
+  }
+  async myPostCount() {
+    const aid = this.account().accountId;
+    return aid ? (await this.listCommunity()).filter((p) => p.userId === aid).length : 0;
+  }
+  async ranking() {
+    const map = new Map();
+    for (const p of await this.listCommunity()) {
+      const k = p.userId || p.author;
+      const r = map.get(k) || { userId: p.userId, name: p.author, posts: 0 };
+      r.posts++; map.set(k, r);
+    }
+    return [...map.values()].sort((a, b) => b.posts - a.posts).slice(0, 100);
+  }
 
   async connect(me, area) {
     if (/full/.test(location.hash) && !this._fullShown) {   // テスト用：#full で満員の画面を確認できる
@@ -115,7 +165,6 @@ export class LocalNet extends Emitter {
     this._post({ t: "state", s });
   }
 
-  updateProfile(me) { this.me = me; this._post({ t: "hello", info: this._info(), ack: true }); }
 
   async chat(kind, body) {
     const msg = { id: uid(), from: this.id, name: this.me.name, kind, body, at: Date.now() };
@@ -138,7 +187,7 @@ export class LocalNet extends Emitter {
     const item = {
       id: "local-" + uid(), kind: "community", name: post.name, genre: post.genre, lat: post.lat, lng: post.lng,
       comment: post.comment, snsUrl: post.snsUrl || null, thumbUrl, photoUrl: thumbUrl,
-      author: post.author || this.me.name, createdAt: new Date().toISOString(), local: true, mine: true,
+      author: post.author || this.me.name, userId: this.account().accountId || null, createdAt: new Date().toISOString(), local: true, mine: true,
     };
     list.push(item);
     setTimeout(() => this._post({ t: "shop" }), 50);
@@ -257,12 +306,57 @@ export class SupabaseNet extends Emitter {
       if (s?.access_token) this.client.realtime.setAuth(s.access_token);
       if (s?.user) { this.user = s.user; this.emit("account", this.account()); }
     });
-    // 保存済みのプロフィール（別の端末でログインしたとき用）
-    const { data: prof } = await this.client.from("profiles").select("name, avatar").eq("id", this.id).maybeSingle();
+    // 保存済みのプロフィール（ログイン済みのとき）
+    let prof = null;
+    if (!this.user.is_anonymous) {
+      ({ data: prof } = await this.client.from("profiles").select("name, avatar").eq("id", this.id).maybeSingle());
+      this.nickname = prof?.name || this.user.user_metadata?.nickname || null;
+    }
     return { id: this.id, profile: prof || null, ...this.account() };
   }
 
-  account() { return { anonymous: !!this.user?.is_anonymous, email: this.user?.email || null }; }
+  // member：ニックネーム＋パスワードで登録した人。ゲスト（匿名）は見るだけ
+  account() { const member = !!this.user && !this.user.is_anonymous; return { member, accountId: member ? this.id : null, nickname: member ? this.nickname : null }; }
+
+  async register(nick, pass, avatar) {
+    const bad = checkNick(nick) || checkPass(pass);
+    if (bad) throw new Error(bad);
+    nick = nick.replace(/\s+/g, " ").trim();
+    const email = await nickToLoginId(nick, this.cfg.accountIdDomain);
+    const { data, error } = await this.client.auth.signUp({ email, password: pass, options: { data: { nickname: nick } } });
+    if (error) {
+      if (/already|registered|exists/i.test(error.message)) throw new Error("そのニックネームはもう使われています。別のニックネームにしてください");
+      throw new Error("登録できませんでした（" + error.message + "）");
+    }
+    if (!data.session) throw new Error("登録の設定がまだです（運営者へ：Supabase の Authentication → Email の「Confirm email」をオフにしてください）");
+    this.user = data.user; this.id = data.user.id;
+    await this.client.realtime.setAuth(data.session.access_token);
+    const { error: perr } = await this.client.from("profiles").upsert({ id: this.id, name: nick, avatar, updated_at: new Date().toISOString() });
+    if (perr) {
+      await this.client.auth.signOut();
+      if (/reserved/.test(perr.message)) throw new Error("その名前は使えません（まちマニア横塚さん本人だけが使える名前です）");
+      if (/duplicate|unique/i.test(perr.message)) throw new Error("そのニックネームはもう使われています。別のニックネームにしてください");
+      throw new Error("登録できませんでした（" + perr.message + "）");
+    }
+  }
+
+  async login(nick, pass) {
+    const email = await nickToLoginId(nick, this.cfg.accountIdDomain);
+    const { error } = await this.client.auth.signInWithPassword({ email, password: pass });
+    if (error) throw new Error(/invalid/i.test(error.message) ? "ニックネームかパスワードがちがいます" : "ログインできませんでした（" + error.message + "）");
+  }
+
+  async myPostCount() {
+    if (this.user?.is_anonymous) return 0;
+    const { count } = await this.client.from("community_shops").select("id", { count: "exact", head: true }).eq("user_id", this.id).eq("status", "approved");
+    return count || 0;
+  }
+
+  async ranking() {
+    const { data, error } = await this.client.rpc("post_ranking", { lim: 100 });
+    if (error) { console.warn(error); return []; }
+    return (data || []).map((r) => ({ userId: r.user_id, name: r.name, posts: Number(r.posts) }));
+  }
 
   isOfficial(id) { return this.official?.has(id); }
 
@@ -271,8 +365,8 @@ export class SupabaseNet extends Emitter {
     // 公式（本人）マークをつける人の一覧。だれでも読めるが、書きかえられるのは運営者だけ
     const { data: off } = await this.client.from("official_users").select("user_id");
     this.official = new Set((off || []).map((r) => r.user_id));
-    const { error: perr } = await this.client.from("profiles").upsert({ id: this.id, name: me.name, avatar: me.avatar, updated_at: new Date().toISOString() });
-    if (perr && /reserved/.test(perr.message)) throw new Error("その名前は使えません（まちマニア横塚さん本人だけが使える名前です）。「すがた」から名前を変えてください");
+    // ゲストはプロフィールを保存しない（見るだけ）。登録した人は見た目だけ更新（名前＝ログイン名は変えない）
+    if (!this.user.is_anonymous) await this.client.from("profiles").update({ avatar: me.avatar, updated_at: new Date().toISOString() }).eq("id", this.id);
     const { data: banned } = await this.client.from("banned_users").select("user_id").eq("user_id", this.id).maybeSingle();
     if (banned) throw new Error("このアカウントは利用が停止されています");
 
@@ -399,7 +493,7 @@ export class SupabaseNet extends Emitter {
 
   async updateProfile(me) {
     this.me = me;
-    await this.client.from("profiles").upsert({ id: this.id, name: me.name, avatar: me.avatar, updated_at: new Date().toISOString() });
+    if (!this.user.is_anonymous) await this.client.from("profiles").update({ avatar: me.avatar, updated_at: new Date().toISOString() }).eq("id", this.id);
     if (this.ch) await this.ch.track({ name: me.name, avatar: me.avatar, state: this.lastState || null, joined: Date.now() });
   }
 
@@ -417,25 +511,6 @@ export class SupabaseNet extends Emitter {
     const { error } = await this.client.from("reports").insert({ target: targetId, message_id: mid, reason: String(reason).slice(0, 400) });
     if (error) throw new Error(error.message);
     return { ok: true };
-  }
-
-  // ゲストのままのアカウントにメールアドレスを登録（別の端末でも同じアバターで遊べる）
-  async registerEmail(email, nickname) {
-    const redirect = location.origin + location.pathname;
-    if (this.user?.is_anonymous) {
-      const { error } = await this.client.auth.updateUser({ email, data: { nickname } }, { emailRedirectTo: redirect });
-      if (error) throw new Error(error.message);
-      return "確認メールを送りました。メール内のリンクを開くと登録が完了します";
-    }
-    const { error } = await this.client.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect, shouldCreateUser: false } });
-    if (error) throw new Error(error.message);
-    return "ログイン用のメールを送りました";
-  }
-
-  async loginWithEmail(email) {
-    const { error } = await this.client.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: false } });
-    if (error) throw new Error(error.message.includes("Signups not allowed") ? "このメールアドレスはまだ登録されていません" : error.message);
-    return "ログイン用のメールを送りました。リンクを開くとこの端末でも同じアカウントになります";
   }
 
   async logout() { await this.client.auth.signOut(); location.reload(); }

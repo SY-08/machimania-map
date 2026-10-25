@@ -10,8 +10,9 @@ import { Transport, Ride } from "./transport.js";
 import { Guide } from "./guide.js";
 import { Avatar, randomAvatar, sanitizeAvatar } from "./avatar.js";
 import { LocalNet, SupabaseNet } from "./net.js";
+import { checkNick, checkPass } from "./account.js";
 import { MiniMap, openModal, toast, openAvatarEditor, shopCardHTML, shopListHTML, esc, anyModalOpen, searchPlaces, postFormHTML, safeUrl } from "./ui.js";
-import { cleanText, RateLimiter, loadBlocked, saveBlocked, STAMPS, stampById } from "./moderation.js";
+import { cleanText, cleanReview, checkReview, REVIEW_GUIDE, RateLimiter, loadBlocked, saveBlocked, STAMPS, stampById } from "./moderation.js";
 
 const THREE = window.THREE;
 const $ = (s, el = document) => el.querySelector(s);
@@ -98,21 +99,20 @@ async function boot() {
   if (okPos) [me.x, me.z] = okPos;
   progress(0.8, "住人をさがしています");
 
-  let profile = store.get("profile");
+  let profile = null;
   let net = CONFIG.supabaseUrl && CONFIG.supabaseAnonKey
     ? new SupabaseNet(CONFIG)
     : new LocalNet({ room: CONFIG.room, bots: CONFIG.localBots, walkable: (x, z) => W.walkable(x, z), spawn: [me.x, me.z] });
-  let account = null;
-  if (net.mode === "online") {
-    try {
-      account = await net.init();
-      if (account.profile) profile = { name: account.profile.name, avatar: sanitizeAvatar(account.profile.avatar) };
-    } catch (e) {
-      console.error(e);
-      toast(e.message, 8000);
-      net = new LocalNet({ room: CONFIG.room, bots: CONFIG.localBots, walkable: (x, z) => W.walkable(x, z), spawn: [me.x, me.z] });
-    }
+  let account = { member: false };
+  try {
+    account = await net.init();
+  } catch (e) {
+    console.error(e);
+    toast(e.message, 8000);
+    net = new LocalNet({ room: CONFIG.room, bots: CONFIG.localBots, walkable: (x, z) => W.walkable(x, z), spawn: [me.x, me.z] });
+    account = await net.init();
   }
+  if (account.member && account.profile) profile = { name: account.profile.name, avatar: sanitizeAvatar(account.profile.avatar) };
   progress(1, "準備ができました");
   $("#loading").hidden = true;
 
@@ -123,11 +123,82 @@ async function boot() {
   sun.target.position.set(me.x, 0, me.z);
   renderer.render(scene, camera);
 
-  if (!profile) {
-    profile = await new Promise((resolve) => openAvatarEditor({
-      name: "", avatar: randomAvatar(), firstTime: true,
-      onSave: (name, avatar) => resolve({ name, avatar }),
+  const isMember = () => !!account?.member;
+  // 登録・ログイン画面（ニックネーム＋パスワード。メールアドレスはいらない）
+  function joinDialog(message = "", { first = false } = {}) {
+    return new Promise((resolve) => {
+      const m = openModal(`
+        <h2>${first ? "ようこそ、まちマニアMAPへ" : "アカウント"}</h2>
+        <p class="lead">${esc(message || "ニックネームとパスワードだけで参加できます。メールアドレスはいりません。")}</p>
+        <div class="join-tabs" role="tablist">
+          <button class="btn" type="button" data-tab="new" aria-pressed="true">はじめて（アカウントをつくる）</button>
+          <button class="btn" type="button" data-tab="login" aria-pressed="false">ログイン</button>
+        </div>
+        <form id="joinForm" class="post-form" autocomplete="on">
+          <label class="field"><b>ニックネーム（12文字まで）</b><input id="jNick" maxlength="12" required autocomplete="username" placeholder="例：ラーメン好きのたろう">
+            <small class="new-only">町やランキングに表示されます。本名や学校名は入れないでください。あとから変えられません。</small></label>
+          <label class="field"><b>パスワード（8文字以上）</b><input id="jPass" type="password" minlength="8" required autocomplete="new-password"></label>
+          <label class="field new-only"><b>パスワード（確認）</b><input id="jPass2" type="password" minlength="8" autocomplete="new-password"></label>
+          <p class="note new-only">パスワードは運営も見られない形で保存されます。<b>忘れたときは再発行できないので、アカウントの作り直し</b>になります。この端末ではログインしたままになります。</p>
+          <div class="row-end">
+            <button class="btn" type="button" id="jGuest">${first ? "登録せずに見てまわる" : "閉じる"}</button>
+            <button class="btn primary" type="submit" id="jGo">次へ（すがたをつくる）</button>
+          </div>
+        </form>
+        ${first ? `<p class="note">登録しないと、チャットとお店の投稿はできません（町を歩いて見ることはできます）。</p>` : ""}`, { dismissable: !first, onClose: () => resolve(null) });
+      let tab = "new";
+      const setTab = (t) => {
+        tab = t;
+        m.el.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tab === t)));
+        m.el.querySelectorAll(".new-only").forEach((el) => { el.hidden = t !== "new"; });
+        $("#jPass", m.el).autocomplete = t === "new" ? "new-password" : "current-password";
+        $("#jGo", m.el).textContent = t === "new" ? "次へ（すがたをつくる）" : "ログイン";
+      };
+      m.el.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+      $("#jGuest", m.el).addEventListener("click", () => { resolve({ type: "guest" }); m.close(); });
+      $("#joinForm", m.el).addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const nick = $("#jNick", m.el).value.replace(/\s+/g, " ").trim(), pass = $("#jPass", m.el).value;
+        const bad = checkNick(nick) || checkPass(pass, tab === "new" ? $("#jPass2", m.el).value : undefined);
+        if (bad) return toast(bad);
+        const btn = $("#jGo", m.el);
+        btn.disabled = true;
+        try {
+          if (tab === "login") { await net.login(nick, pass); resolve({ type: "login" }); m.close(); location.reload(); return; }
+          resolve({ type: "new", nick, pass }); m.close();
+        } catch (ex) { toast(ex.message, 5000); btn.disabled = false; }
+      });
+    });
+  }
+  async function runJoin(message, opts) {
+    const r = await joinDialog(message, opts);
+    if (!r || r.type !== "new") return r;
+    // すがたをつくってから登録する
+    const avatar = await new Promise((resolve) => openAvatarEditor({
+      name: r.nick, avatar: profile?.avatar || randomAvatar(), firstTime: true, nameLocked: true,
+      nameNote: "ニックネームがそのまま名前になります", saveLabel: "登録して町に出かける",
+      onSave: (_n, av) => resolve(av),
     }));
+    try {
+      await net.register(r.nick, r.pass, avatar);
+      store.set("profile", { name: r.nick, avatar });
+      location.reload();
+    } catch (ex) {
+      toast(ex.message, 6000);
+      return runJoin(ex.message, opts);
+    }
+    return r;
+  }
+  function openJoin(message) { runJoin(message); }
+
+  if (!profile) {
+    if (!store.get("joinSeen")) {
+      store.set("joinSeen", true);
+      await runJoin("", { first: true });
+    }
+    const g = store.get("guestAvatar") || randomAvatar();
+    store.set("guestAvatar", g);
+    profile = { name: "ゲスト", avatar: g };
   }
   store.set("profile", profile);
 
@@ -249,6 +320,7 @@ async function boot() {
     const input = $("#chatInput");
     const text = cleanText(input.value);
     if (!text) return;
+    if (!isMember()) { openJoin("チャットするには、ニックネームとパスワードでアカウントをつくってください"); return; }
     const err = limiter.check();
     if (err) { toast(err); return; }
     input.value = "";
@@ -257,6 +329,7 @@ async function boot() {
   });
   $("#stampPanel").innerHTML = STAMPS.map((s) => `<button type="button" class="stamp-btn" data-stamp="${s.id}">${s.emoji}<span>${s.label}</span></button>`).join("");
   $("#stampPanel").addEventListener("click", async (e) => {
+    if (!isMember() && e.target.closest("[data-stamp]")) { openJoin("スタンプを送るには、ニックネームとパスワードでアカウントをつくってください"); return; }
     const b = e.target.closest("[data-stamp]");
     if (!b) return;
     const err = limiter.check();
@@ -518,10 +591,12 @@ async function boot() {
     });
   });
   $("#btnAvatar").addEventListener("click", () => openAvatarEditor({
-    name: profile.name, avatar: profile.avatar,
+    name: profile.name, avatar: profile.avatar, nameLocked: true,
+    nameNote: isMember() ? "ニックネーム（ログイン名）は変えられません" : "登録するとニックネームが名前になります",
     onSave: async (name, avatar) => {
-      profile = { name, avatar };
+      profile = { name: profile.name, avatar };
       store.set("profile", profile);
+      if (!isMember()) store.set("guestAvatar", avatar);
       myAvatar.setConfig(avatar, name);
       myAvatar.emote();
       try { await net.updateProfile(profile); } catch (e) { toast(e.message); }
@@ -531,49 +606,39 @@ async function boot() {
   $("#btnHelp").addEventListener("click", () => guide.menu());
   guide.onCredits = () => openHelp();
 
-  function openAccount() {
-    if (net.mode !== "online") {
-      openModal(`
-        <h2>アカウント</h2>
-        <p class="lead">いまは<b>テストモード</b>です。サーバーにつながっていないので、会えるのは同じブラウザの別タブとテスト住人だけです。</p>
-        <p class="note">Supabase（無料）を設定して <code>js/config.js</code> に URL と鍵を貼ると、オンラインになり、ほかの人と会ったりメールでアカウント登録ができるようになります。手順は README.md にあります。</p>`);
-      return;
-    }
-    const a = account || {};
+  async function openAccount() {
+    if (!isMember()) { openJoin(""); return; }
+    const n = await net.myPostCount().catch(() => 0);
     const m = openModal(`
       <h2>アカウント</h2>
-      ${a.anonymous ? `
-        <p class="lead">いまは<b>ゲスト</b>で遊んでいます。<b>メールアドレスとニックネーム</b>で登録すると、ほかの端末でも同じ名前・すがたで遊べます。</p>
-        <label class="field"><b>ニックネーム（必須・12文字まで）</b><input id="acNick" maxlength="12" value="${esc(profile.name || "")}" autocomplete="nickname"></label>
-        <label class="field"><b>メールアドレス</b><input type="email" id="acEmail" placeholder="you@example.com" autocomplete="email"></label>
-        <div class="row-end">
-          <button class="btn" type="button" id="acLogin">登録ずみのアカウントでログイン</button>
-          <button class="btn primary" type="button" id="acReg">登録する</button>
-        </div>
-        <p class="note">確認メールのリンクを開くと登録が完了します。メールアドレスはほかの人には見えず、運営の連絡と本人確認にだけ使います。</p>` : `
-        <p class="lead"><b>${esc(profile.name || "")}</b> さん（${esc(a.email || "")}）で登録ずみです。</p>
-        <div class="row-end"><button class="btn" type="button" id="acOut">ログアウト</button></div>`}`);
-    const email = () => $("#acEmail", m.el)?.value.trim();
-    const okEmail = () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email() || "");
-    $("#acReg", m.el)?.addEventListener("click", async () => {
-      const nick = cleanText($("#acNick", m.el).value, 12).trim();
-      if (!nick) return toast("ニックネームを入れてください");
-      if (!okEmail()) return toast("メールアドレスを確認してください");
-      try {
-        if (nick !== profile.name) {
-          profile.name = nick; store.set("profile", profile);
-          myAvatar.setConfig(profile.avatar, nick);
-          await net.updateProfile(profile);
-        }
-        toast(await net.registerEmail(email(), nick), 7000); m.close();
-      } catch (e) { toast(e.message, 5000); }
-    });
-    $("#acLogin", m.el)?.addEventListener("click", async () => {
-      if (!okEmail()) return toast("メールアドレスを確認してください");
-      try { toast(await net.loginWithEmail(email()), 6000); m.close(); } catch (e) { toast(e.message, 5000); }
-    });
-    $("#acOut", m.el)?.addEventListener("click", () => net.logout());
+      <p class="lead"><b>${esc(profile.name)}</b> さんでログインしています${net.mode === "online" ? "" : "（テストモード：この端末の中だけのアカウント）"}。</p>
+      <p class="note">これまでの投稿：<b>${n}件</b></p>
+      <p class="note">この端末ではログインしたままになります。別の端末では、ニックネームとパスワードでログインしてください。パスワードを忘れたときは再発行できないので、新しいアカウントを作ってください。</p>
+      <div class="row-end">
+        <button class="btn" type="button" id="acRank">投稿ランキングを見る</button>
+        <button class="btn" type="button" id="acOut">ログアウト</button>
+      </div>`);
+    $("#acRank", m.el).addEventListener("click", () => { m.close(); openRanking(); });
+    $("#acOut", m.el).addEventListener("click", () => { store.set("profile", null); net.logout(); });
   }
+
+  // ------------------------------------------------------------ 投稿数・ランキング
+  async function refreshMyPosts() {
+    const chip = $("#myPosts");
+    if (!chip) return;
+    if (!isMember()) { chip.textContent = "📝 登録して投稿"; return; }
+    const n = await net.myPostCount().catch(() => null);
+    if (n != null) chip.textContent = `📝 あなたの投稿 ${n}件`;
+  }
+  async function openRanking() {
+    const m = openModal(`<h2>🏆 投稿ランキング</h2><p class="lead">口コミをたくさん投稿してくれた人のランキングです。</p><ol class="rank-list" id="rankList"><li>読み込み中…</li></ol>`);
+    const list = await net.ranking().catch(() => []);
+    const myId = account?.accountId;
+    const medal = ["🥇", "🥈", "🥉"];
+    $("#rankList", m.el).innerHTML = list.length ? list.map((r, i) => `<li class="${r.userId && r.userId === myId ? "me" : ""}"><span class="no">${medal[i] || i + 1}</span><span>${net.isOfficial?.(r.userId) ? "★ " : ""}${esc(r.name || "だれか")}</span><span class="n">${r.posts}件</span></li>`).join("")
+      : `<li>まだ投稿がありません。最初の1件を投稿してみませんか？</li>`;
+  }
+  $("#myPosts")?.addEventListener("click", () => (isMember() ? openRanking() : openJoin("投稿するには、ニックネームとパスワードでアカウントをつくってください")));
 
   function openHelp() {
     const approx = !index.roadsFromOsm.length;
@@ -1045,6 +1110,7 @@ async function boot() {
   function setupModesAndPosts() {
     $("#modeBar").addEventListener("click", (e) => {
       const b = e.target.closest("[data-mode]");
+      if (b?.dataset.mode === "ranking") openRanking();
       if (!b || b.dataset.mode === mode) return;
       setMode(b.dataset.mode);
       toast(`${MODES[mode].label}：${MODES[mode].note}`, 3500);
@@ -1053,48 +1119,52 @@ async function boot() {
     loadCommunity();
     $("#btnPost").addEventListener("click", openPostForm);
     // ほかの人の投稿がリアルタイムで届いたら、すぐ町に建てる
-    net.on("shop", () => loadCommunity());
+    net.on("shop", () => { loadCommunity(); refreshMyPosts(); });
+    refreshMyPosts();
   }
 
   function openPostForm() {
+    if (!isMember()) { openJoin("投稿するには、ニックネームとパスワードでアカウントをつくってください"); return; }
     const [lat, lng] = proj.latlng(me.x, me.z);
     const area = W.areaAt(me.x, me.z);
     const here = `${area ? area.pref + area.name + "・" : ""}${lat.toFixed(5)}, ${lng.toFixed(5)}`;
     const online = net.mode === "online";
-    const m = openModal(postFormHTML({ here, online, nickname: store.get("nickname") || profile.name }));
+    const m = openModal(postFormHTML({ here, online, nickname: profile.name, guide: REVIEW_GUIDE }));
     const f = $("#postForm", m.el);
-    const how = () => f.querySelector("input[name=pHow]:checked").value;
-    const syncHow = () => {
-      const text = how() === "text";
-      $(".sns-only", m.el).hidden = text;
-      $("#pCommentLabel", m.el).textContent = text ? "口コミ（必須・10文字以上）" : "ひとこと（なくても大丈夫）";
-      $("#pComment", m.el).placeholder = text ? "食べたもの・味・お店の雰囲気・混み具合など、行ってわかったことを書いてください" : "おすすめのメニューや、お店の雰囲気など";
-    };
-    f.querySelectorAll("input[name=pHow]").forEach((r) => r.addEventListener("change", syncHow));
     f.querySelectorAll("input[name=pWhere]").forEach((r) => r.addEventListener("change", () => {
       $("#pCoords", m.el).hidden = f.querySelector("input[name=pWhere]:checked").value !== "coords";
     }));
+    const showReview = () => {
+      const v = $("#pComment", m.el).value, box = $("#pReviewCheck", m.el);
+      $("#pCount", m.el).textContent = `${[...v].length} / 200`;
+      const r = checkReview(v);
+      box.hidden = r.ok;
+      if (!r.ok) box.textContent = `「${r.word}」は${r.why}にあたるため、このままでは投稿できません。感じたことを、人やお店を傷つけない言葉で書き直してください。`;
+    };
+    $("#pComment", m.el).addEventListener("input", showReview);
     $("#pSns", m.el).addEventListener("input", (e) => {
       const v = e.target.value.trim(), box = $("#pSnsCheck", m.el);
       const sns = parseSns(v);
       box.hidden = !v;
       box.className = "sns-check " + (sns ? "ok" : "ng");
-      box.textContent = sns ? `${sns.emoji} ${sns.label}の投稿として登録します` : "対応しているSNSの投稿リンクではないようです";
+      box.textContent = sns ? `${sns.emoji} ${sns.label}の投稿をいっしょに表示します` : "対応しているSNSの投稿リンクではないようです（空欄でも投稿できます）";
     });
     f.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const nick = $("#pNick", m.el).value.replace(/\s+/g, " ").trim().slice(0, 12);
-      if (!nick) return toast("ニックネームを入れてください");
+      const nick = profile.name;
       const name = $("#pName", m.el).value.replace(/\s+/g, " ").trim();
       if (!name) return toast("お店の名前を入れてください");
-      const comment = cleanText($("#pComment", m.el).value, 200);
+      const raw = $("#pComment", m.el).value;
+      if ([...raw.trim()].length < 10) return toast("口コミは10文字以上で書いてください");
+      const rc = checkReview(raw + " " + name);
+      if (!rc.ok) { showReview(); return toast(`「${rc.word}」は${rc.why}にあたるため投稿できません`, 5000); }
+      const comment = cleanReview(raw, 200);
       let snsUrl = null;
-      if (how() === "sns") {
-        const sns = parseSns($("#pSns", m.el).value);
-        if (!sns) return toast("SNS投稿のリンクを貼ってください（難しいときは「文字だけで口コミを書く」を選べます）", 4500);
+      const snsRaw = $("#pSns", m.el).value.trim();
+      if (snsRaw) {
+        const sns = parseSns(snsRaw);
+        if (!sns) return toast("SNS投稿のリンクを確認してください（なければ空欄のままで投稿できます）", 4500);
         snsUrl = sns.url.replace(/[?&](igsh|igshid|si|utm_[a-z]+|_r|is_from_webapp|sender_device)=[^&]*/g, "").replace(/\?$/, "");
-      } else if ([...comment].length < 10) {
-        return toast("口コミは10文字以上で書いてください");
       }
       let plat = lat, plng = lng;
       if (f.querySelector("input[name=pWhere]:checked").value === "coords") {
@@ -1110,10 +1180,10 @@ async function boot() {
       btn.disabled = true;
       btn.textContent = "送信中…";
       try {
-        store.set("nickname", nick);
         await net.submitCommunity({ author: nick, name, genre: $("#pGenre", m.el).value, lat: +plat.toFixed(6), lng: +plng.toFixed(6), comment, snsUrl });
         m.close();
         await loadCommunity();
+        refreshMyPosts();
         if (mode === "research") setMode("community");
         const p = findWalkable(x, z + 5.5, 12);
         if (p) { me.x = p[0]; me.z = p[1]; me.ry = Math.PI; }

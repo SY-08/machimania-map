@@ -56,6 +56,7 @@ create policy "messages_select" on public.messages for select to authenticated
 -- 書けるのは自分の名前で、利用停止されていない人だけ
 create policy "messages_insert" on public.messages for insert to authenticated
   with check (user_id = auth.uid()
+              and coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false) = false   -- ゲスト（未登録）はチャットできない
               and not exists (select 1 from public.banned_users b where b.user_id = auth.uid()));
 
 -- 連投制限：10秒に5回まで
@@ -142,8 +143,8 @@ create table if not exists public.community_shops (
   status      text not null default 'approved' check (status in ('pending', 'approved', 'rejected')),
   created_at  timestamptz not null default now(),
   reviewed_at timestamptz,
-  -- SNS投稿のリンク（おすすめ）か、10文字以上の口コミのどちらかは必須
-  constraint community_has_content check (sns_url is not null or photo_path is not null or video_url is not null or char_length(coalesce(comment, '')) >= 10)
+  -- 口コミ（10文字以上）は必須。SNS投稿のリンクはおすすめ（なくてもよい）
+  constraint community_has_content check (char_length(btrim(coalesce(comment, ''))) >= 10)
 );
 -- 以前の版の schema.sql を実行していた場合の更新
 alter table public.community_shops add column if not exists sns_url text;
@@ -151,7 +152,7 @@ alter table public.community_shops drop constraint if exists community_has_media
 alter table public.community_shops drop constraint if exists community_shops_comment_check;
 alter table public.community_shops drop constraint if exists community_has_content;
 alter table public.community_shops add constraint community_has_content
-  check (sns_url is not null or photo_path is not null or video_url is not null or char_length(coalesce(comment, '')) >= 10);
+  check (char_length(btrim(coalesce(comment, ''))) >= 10) not valid;   -- 以前の投稿（SNSリンクだけ）はそのまま残す
 alter table public.community_shops drop constraint if exists community_comment_len;
 alter table public.community_shops add constraint community_comment_len check (char_length(comment) <= 200);
 alter table public.community_shops alter column status set default 'approved';
@@ -168,6 +169,7 @@ create policy "community_select" on public.community_shops for select to authent
 -- 投稿できるのは自分の名前で、利用停止されていない人。ファイルは自分のフォルダのものだけ
 create policy "community_insert" on public.community_shops for insert to authenticated
   with check (user_id = auth.uid()
+              and coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false) = false   -- ゲスト（未登録）は投稿できない
               and not exists (select 1 from public.banned_users b where b.user_id = auth.uid())
               and (photo_path is null or photo_path like auth.uid()::text || '/%')
               and (thumb_path is null or thumb_path like auth.uid()::text || '/%')
@@ -178,10 +180,29 @@ create policy "community_update_admin" on public.community_shops for update to a
 create policy "community_delete" on public.community_shops for delete to authenticated
   using (user_id = auth.uid() or public.is_admin());
 
+-- 口コミのチェック：人やお店の尊厳を傷つける言葉（暴言・見下す言葉・差別・根拠のない犯罪の決めつけ・人格攻撃・晒し）は投稿できない。
+-- 味・量・値段・接客・待ち時間などの率直なマイナス評価は通す。画面側（js/moderation.js の checkReview）と同じ考え方。
+create or replace function public.review_is_abusive(t text) returns boolean
+language plpgsql immutable as $$
+declare s text := regexp_replace(lower(normalize(coalesce(t, ''), NFKC)), '\s+', '', 'g');
+begin
+  return s ~ '(死ね|しね|氏ね|タヒね|殺す|ころす|殺したい|消えろ|きえろ|潰れろ|つぶれろ|潰れてしまえ|潰してやる|燃やす|放火)'
+      or s ~ '(クズ|くず|カス|ゴミ屋|ごみ屋|ゴミ店|ゴミ以下|ゴミみたい)'
+      or s ~ '(バカ(?!高|たか|うま|旨|でか|デカ|多|安)|馬鹿(?!高|うま|旨|でか|多|安)|アホ|ブス|デブ|ハゲ|キモい|キモイ|きもい|ババア|ばばあ|ジジイ|じじい|クソ(店|野郎|女|男|ババア|ジジイ|大将))'
+      or s ~ '(ガイジ|がいじ|池沼|支那|シナ人|チョン|土人|きちがい|キチガイ|基地外)'
+      or s ~ '(詐欺|サギ師|犯罪者|犯罪店|違法営業|脱税|前科|逮捕され|ヤクザ|やくざ|反社|闇営業|食中毒を出|毒を盛)'
+      or s ~ '(店員|店主|店長|大将|女将|オーナー|スタッフ|バイト|夫婦|奥さん|旦那)[^。！!？?]{0,8}(人間性|人格|頭がおかし|頭おかし|頭悪|顔が|顔面|見た目が|生理的に無理|障害|病気|死んで|消えて|辞めろ|やめろ|クビにしろ)'
+      or s ~ '(人間性|人格|頭がおかし|頭おかし|頭が悪|性格が悪|性格悪)[^。！!？?]{0,8}(店員|店主|店長|大将|女将|オーナー|スタッフ|バイト|奥さん|旦那)'
+      or s ~ '(住所|自宅|本名|電話番号)(を|は)(晒|さら|特定)';
+end $$;
+
 -- 新しい投稿はすぐ公開。投稿は1人1日10件まで（いたずらの大量投稿よけ）
 create or replace function public.community_before_insert() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
+  if public.review_is_abusive(coalesce(new.comment, '') || ' ' || coalesce(new.name, '')) then
+    raise exception 'abusive review';
+  end if;
   new.status := 'approved';
   new.reviewed_at := null;
   if (select count(*) from public.community_shops
@@ -237,7 +258,13 @@ begin
   end if;
   if (n ilike '%まちマニア%' or n ilike '%横塚%' or n ilike '%マチマニア%')
      and not exists (select 1 from public.official_users o where o.user_id = auth.uid()) then
-    raise exception 'reserved name';
+    -- 最初の1人（まだ公式アカウントがいないときに「まちマニア横塚」で登録した人＝運営者本人）だけは、自動で公式にする
+    if tg_table_name = 'profiles' and n = 'まちマニア横塚' and not exists (select 1 from public.official_users)
+       and coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false) = false then
+      insert into public.official_users (user_id) values (auth.uid());
+    else
+      raise exception 'reserved name';
+    end if;
   end if;
   return new;
 end $$;
@@ -251,3 +278,25 @@ drop trigger if exists community_reserved_name on public.community_shops;
 create trigger community_reserved_name before insert on public.community_shops
   for each row execute function public.check_reserved_name();
 
+
+
+-- ---------------------------------------------------------------------
+-- ニックネームの重複禁止（全角・半角、大文字・小文字、空白のちがいは同じ名前とみなす）
+-- ---------------------------------------------------------------------
+create unique index if not exists profiles_name_unique
+  on public.profiles (lower(regexp_replace(normalize(name, NFKC), '\s+', '', 'g')));
+
+-- ---------------------------------------------------------------------
+-- 投稿数のランキング（公開中の口コミの数。だれでも読める）
+-- ---------------------------------------------------------------------
+create or replace function public.post_ranking(lim int default 100)
+returns table (user_id uuid, name text, posts bigint)
+language sql stable security definer set search_path = public as $$
+  select c.user_id, coalesce(p.name, max(c.author)) as name, count(*) as posts
+  from public.community_shops c left join public.profiles p on p.id = c.user_id
+  where c.status = 'approved'
+  group by c.user_id, p.name
+  order by posts desc, min(c.created_at) asc
+  limit greatest(1, least(lim, 200));
+$$;
+grant execute on function public.post_ranking(int) to authenticated;

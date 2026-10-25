@@ -29,7 +29,7 @@ const SHEETS = {
   },
   accounts: {
     name: "アカウント",
-    headers: ["ユーザーID", "ニックネーム", "メールアドレス", "登録の種類", "登録日時", "最終ログイン", "公式★", "利用停止", "メモ"],
+    headers: ["ユーザーID", "ニックネーム", "投稿数", "登録日時", "最終ログイン", "公式★", "利用停止", "メモ"],
   },
   reports: {
     name: "通報",
@@ -217,26 +217,28 @@ function pullAccounts_() {
     users.push(...list);
     if (list.length < 500) break;
   }
+  // 投稿数（公開中の口コミの数）
+  const counts = new Map();
+  for (const c of supa_("GET", "/rest/v1/community_shops?select=user_id&status=eq.approved&limit=100000")) counts.set(c.user_id, (counts.get(c.user_id) || 0) + 1);
   const sh = sheet_(SHEETS.accounts);
   const rows = readRows_(sh, SHEETS.accounts);
   const index = new Map(rows.map((r, i) => [String(r["ユーザーID"]), i + 2]));
   const h = SHEETS.accounts.headers;
   const add = [];
   for (const u of users) {
+    if (u.is_anonymous) continue;   // 登録していないゲスト（見るだけの人）は載せない
     const p = names.get(u.id);
     const nick = (p && p.name) || (u.user_metadata && u.user_metadata.nickname) || "";
-    if (u.is_anonymous && !p) continue;   // 町に入っていないゲストは載せない
+    // メールアドレス・パスワードは持たない（ログイン用の内部IDも載せない）
     const vals = {
-      "ユーザーID": u.id, "ニックネーム": nick, "メールアドレス": u.email || "",
-      "登録の種類": u.is_anonymous ? "ゲスト" : (u.email_confirmed_at ? "メール登録" : "メール確認待ち"),
+      "ユーザーID": u.id, "ニックネーム": nick, "投稿数": counts.get(u.id) || 0,
       "登録日時": fmtTime_(u.created_at), "最終ログイン": fmtTime_(u.last_sign_in_at),
       "公式★": official.has(u.id), "利用停止": banned.has(u.id), "メモ": "",
     };
     if (index.has(u.id)) {
-      // ニックネーム・メール・種類・最終ログインだけ更新（チェックとメモはシートが正）
+      // ニックネーム・投稿数・登録日時・最終ログインだけ更新（チェックとメモはシートが正）
       const r = index.get(u.id);
-      sh.getRange(r, h.indexOf("ニックネーム") + 1, 1, 4).setValues([[vals["ニックネーム"], vals["メールアドレス"], vals["登録の種類"], vals["登録日時"]]]);
-      sh.getRange(r, h.indexOf("最終ログイン") + 1).setValue(vals["最終ログイン"]);
+      sh.getRange(r, h.indexOf("ニックネーム") + 1, 1, 4).setValues([[vals["ニックネーム"], vals["投稿数"], vals["登録日時"], vals["最終ログイン"]]]);
     } else {
       add.push(h.map((k) => vals[k]));
     }
