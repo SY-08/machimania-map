@@ -402,6 +402,7 @@ export class SupabaseNet extends Emitter {
   }
 
   async _joinLobby() {
+    if (this.lobby) { try { await this.client.removeChannel(this.lobby); } catch { /* なし */ } this.lobby = null; }
     const lobby = this.client.channel("lobby", { config: { private: true, presence: { key: this.id } } });
     this.lobby = lobby;
     let synced;

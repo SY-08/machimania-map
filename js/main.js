@@ -392,8 +392,9 @@ async function boot() {
 
   // ------------------------------------------------------------ 接続（チャット欄の準備ができてから）
   let currentArea = W.tileKeyAt(me.x, me.z);
-  let waitTimer = null;
+  let waitTimer = null, retryTimer = null, retryDelay = 15000, retryNoticed = false;
   async function connectNet() {
+    clearTimeout(retryTimer);
     try {
       const info = await net.connect({ name: profile.name, avatar: profile.avatar }, currentArea);
       account = { ...(account || {}), ...info };
@@ -403,7 +404,10 @@ async function boot() {
     } catch (e) {
       if (e.code === "FULL") { showWaiting(e.count); return; }
       console.error(e);
-      toast(e.message, 8000);
+      // 通信が一時的にうまくいかないときは、少しずつ間をあけて自動でつなぎ直す（そのあいだもひとりで歩ける）
+      if (!retryNoticed) { toast("いまサーバーにつながりにくいので、自動でつなぎ直します（ひとりで歩くことはできます）", 7000); retryNoticed = true; }
+      retryTimer = setTimeout(connectNet, retryDelay);
+      retryDelay = Math.min(retryDelay * 2, 120000);
     }
     updateNetChip();
   }
