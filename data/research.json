@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-24T20:46:33+00:00",
+ "updated": "2026-10-25T01:27:44+00:00",
  "shops": [
   {
    "id": "r-20261022-3",
@@ -14,6 +14,22 @@
    "background": "旧東海道・品川宿の面影が残る北品川の一角に出店。",
    "sources": [
     "https://prtimes.jp/main/html/rd/p/000000001.000192156.html"
+   ],
+   "facing": 0
+  },
+  {
+   "id": "r-20261024-5",
+   "type": "new",
+   "name": "拉麺あるひ",
+   "genre": "ramen",
+   "lat": 35.102554,
+   "lng": 136.956482,
+   "opened": "2026-10-22",
+   "address": "愛知県名古屋市天白区野並3-225-1 サーナ野並1階",
+   "summary": "名古屋コーチンのうまみを生かしたラーメン店。約20席。昼と夜の二部営業、水曜定休。",
+   "background": "バンテリンドーム ナゴヤ近くで「ramen＆coffee spring's」を営んでいた店主が再始動した店。野並駅前。",
+   "sources": [
+    "https://jouhou.nagoya/ramen-arch/"
    ],
    "facing": 0
   }
