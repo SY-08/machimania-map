@@ -695,7 +695,7 @@ async function boot() {
   addEventListener("keyup", (e) => keys.delete(e.code));
   addEventListener("blur", () => keys.clear());
 
-  let yaw = 0, pitch = 0.8, zoom = 1.25;
+  let yaw = 0, pitch = 0.8, zoom = 1.25, lastUserCam = 0;
   const pointers = new Map();
   let drag = null, pinchD = 0;
   canvas.addEventListener("pointerdown", (e) => {
@@ -718,7 +718,7 @@ async function boot() {
     if (!drag) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 7) drag.moved = true;
-    if (drag.moved) { yaw -= dx * 0.006; pitch = clamp(pitch + dy * 0.004, 0.38, 1.3); }
+    if (drag.moved) { yaw -= dx * 0.006; pitch = clamp(pitch + dy * 0.004, 0.38, 1.3); lastUserCam = performance.now(); }
     drag.x = e.clientX; drag.y = e.clientY;
   });
   const endPointer = (e) => {
@@ -811,8 +811,8 @@ async function boot() {
       if (keys.has("KeyS") || keys.has("ArrowDown")) iz -= 1;
       if (keys.has("KeyA") || keys.has("ArrowLeft")) ix -= 1;
       if (keys.has("KeyD") || keys.has("ArrowRight")) ix += 1;
-      if (keys.has("KeyQ")) yaw += dt * 1.6;
-      if (keys.has("KeyE")) yaw -= dt * 1.6;
+      if (keys.has("KeyQ")) { yaw += dt * 1.6; lastUserCam = now; }
+      if (keys.has("KeyE")) { yaw -= dt * 1.6; lastUserCam = now; }
     }
     if (joy.id !== null) { ix += joy.x; iz += -joy.y; }
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw);   // カメラの向く方向（前）
@@ -838,6 +838,12 @@ async function boot() {
       r.update(dt);   // 着いたら、この中で ride が null になることがある
       me.x = r.pos.x; me.z = r.pos.z; me.ry = r.dir;
       me.vx = me.vz = 0; me.speed = 0;
+      if (ride && r.kind !== "train") {
+        // 飛行機・船：カメラがゆっくり後ろに回りこむ（自分で回したら、しばらくはそのまま）
+        if (now - lastUserCam > 3000) yaw = lerpAngle(yaw, r.dir + Math.PI, 1 - Math.exp(-0.7 * dt));
+        // 着く前に、到着地の町を先に読み込んでおく（着陸のときにカクつかないように）
+        if (r.dest && !r.preloaded && r.leg && r.s > r.leg.total * 0.6) { r.preloaded = true; W.ensureAround(r.dest[0], r.dest[1]).catch(() => {}); }
+      }
       walkTarget = null; marker.visible = false;
       $("#rideStatus").textContent = r.progressText();
     } else {
@@ -908,10 +914,10 @@ async function boot() {
     const fogFar = high ? 2600 : 430, fogNear = high ? 700 : 150;
     scene.fog.far += (fogFar - scene.fog.far) * Math.min(1, dt * 2);
     scene.fog.near += (fogNear - scene.fog.near) * Math.min(1, dt * 2);
-    const sc = high ? 4 : 1;
+    const sc = W.sea.scale.x + ((high ? 4 : 1) - W.sea.scale.x) * Math.min(1, dt * 2);
     W.sea.scale.set(sc, sc, 1);
-    W.sky.scale.setScalar(high ? 4 : 1);
-    camera.far = high ? 5000 : 1200;
+    W.sky.scale.setScalar(sc);
+    camera.far = Math.max(1200, scene.fog.far * 1.8);
     camera.updateProjectionMatrix();
 
     placeBubble(selfTarget, me.x, me.z, myAvatar.cfg.height);
@@ -987,12 +993,29 @@ async function boot() {
     const st = near.item;
     const lines = near.lines;
     let cur = lines[0];
+    const normSt = (v) => String(v || "").normalize("NFKC").replace(/\s+/g, "").replace(/駅$/, "");
+    // この駅から乗りかえなしで行ける駅（全部の路線）
+    const reachable = () => {
+      const out = [];
+      for (const id of lines) {
+        const { order, idx } = transport.lineInfo(id, st);
+        order.forEach((o, i) => { if (i !== idx) out.push({ line: id, i, name: o[0] }); });
+      }
+      return out;
+    };
     const render = () => {
       const { order, idx, info } = transport.lineInfo(cur, st);
       const before = order.slice(0, idx).map((o, i) => ({ o, i })).reverse();
       const after = order.slice(idx + 1).map((o, i) => ({ o, i: idx + 1 + i }));
       const dirBtn = (arr, label) => arr.length ? `<h4>${esc(label)}</h4><div class="ride-list">${arr.map(({ o, i }) => `<button type="button" class="ride-item" data-dest="${i}"><b>${esc(o[0])}</b><small>${Math.abs(i - idx)}駅</small></button>`).join("")}</div>` : "";
+      const names = [...new Set(reachable().map((r) => r.name))];
       return `<h2>🚃 ${esc(st.name)}駅</h2>
+        <form class="dest-form" id="destForm" autocomplete="off">
+          <label class="field"><b>行き先の駅名を入れる</b>
+            <div class="dest-row"><input id="destInput" list="destList" placeholder="例：新宿" enterkeyhint="go"><button class="btn primary" type="submit">この駅まで乗る</button></div>
+            <small>この駅から乗りかえなしで行ける駅が候補に出ます。</small></label>
+          <datalist id="destList">${names.map((n) => `<option value="${esc(n)}">`).join("")}</datalist>
+        </form>
         <div class="seg ride-lines">${lines.map((id) => `<button type="button" data-line="${esc(id)}" aria-pressed="${id === cur}"><i style="background:${esc(transport.index.lines[id]?.color || "#999")}"></i>${esc(transport.index.lines[id]?.name || id)}</button>`).join("")}</div>
         <p class="lead">${esc(info?.name || "")}の行き先をえらんでね。${info?.approx ? "（この路線は、駅と駅をまっすぐ走ります）" : ""}</p>
         ${dirBtn(after, `${after.length ? after[after.length - 1].o[0] : ""} 方面`)}
@@ -1000,9 +1023,34 @@ async function boot() {
     };
     const m = openModal(render());
     const box = m.el.querySelector(".modal");
+    const goTyped = () => {
+      const q = normSt($("#destInput", m.el)?.value);
+      if (!q) return toast("行き先の駅名を入れてください");
+      if (q === normSt(st.name)) return toast("いまいる駅です");
+      const all = reachable();
+      // 完全に一致 → 前方一致 → 部分一致の順でさがす（いま選んでいる路線を優先）
+      const pick = (f) => all.filter((r) => f(normSt(r.name))).sort((x, y) => (x.line === cur ? 0 : 1) - (y.line === cur ? 0 : 1))[0];
+      const hit = pick((n) => n === q) || pick((n) => n.startsWith(q)) || pick((n) => n.includes(q));
+      if (hit) { m.close(); startTrain(hit.line, st, hit.i); return; }
+      // 乗りかえが必要な駅：ワープを提案
+      const far = searchPlaces(index, [], q).find((r) => r.kind === "station");
+      m.close();
+      if (!far) { toast(`「${q}」という駅が見つかりませんでした`); return; }
+      const c = openModal(`<h2>${esc(far.label)}</h2>
+        <p class="lead">${esc(st.name)}駅からは、乗りかえなしでは行けない駅です。${esc(far.label)}へワープしますか？</p>
+        <div class="row-end"><button class="btn" type="button" data-x="no">やめる</button><button class="btn primary" type="button" data-x="go">ワープする</button></div>`);
+      c.el.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-x]");
+        if (!b) return;
+        c.close();
+        if (b.dataset.x === "go") teleport(far.x, far.z, `${far.label}に着きました`, { station: far.station });
+      });
+    };
+    const bindForm = () => $("#destForm", m.el)?.addEventListener("submit", (e) => { e.preventDefault(); goTyped(); });
+    bindForm();
     m.el.addEventListener("click", (e) => {
       const lb = e.target.closest("[data-line]");
-      if (lb) { cur = lb.dataset.line; box.innerHTML = '<button class="close-x" type="button" aria-label="閉じる">✕</button>' + render(); box.querySelector(".close-x").addEventListener("click", m.close); return; }
+      if (lb) { cur = lb.dataset.line; box.innerHTML = '<button class="close-x" type="button" aria-label="閉じる">✕</button>' + render(); box.querySelector(".close-x").addEventListener("click", m.close); bindForm(); return; }
       const db = e.target.closest("[data-dest]");
       if (db) { m.close(); startTrain(cur, st, +db.dataset.dest); }
     });
@@ -1073,6 +1121,7 @@ async function boot() {
         endRide(f[0], f[1], `${to.name}に着きました`);
       },
     });
+    r.dest = to.pos;
     beginRide(r, `✈ ${from.name} → ${to.name}`);
   }
   function runwayVec(a) { const d = ((a.dir || 0) * Math.PI) / 180; return [Math.sin(d), -Math.cos(d)]; }
@@ -1093,6 +1142,7 @@ async function boot() {
         endRide(f[0], f[1], `${to.name}に着きました`);
       },
     });
+    r.dest = to.pos;
     beginRide(r, `⛴ ${route.name}　${port.name} → ${to.name}`);
   }
 

@@ -7,6 +7,35 @@ import { cumulative, sampleAt, densify } from "./geo.js";
 const THREE = window.THREE;
 const BUILD_R = 700;
 
+// ---------------------------------------------------------------- なめらかな道すじ（飛行機・船）
+// 折れ線の角をなくすため、点をなめらかな曲線（Catmull-Rom）でつなぎ、等間隔に打ち直す
+function smoothPath(pts, step) {
+  if (pts.length < 3) return densify(pts, step);
+  const curve = new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(p[0], 0, p[1])), false, "centripetal");
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  const n = Math.max(8, Math.ceil(len / step));
+  curve.arcLengthDivisions = Math.min(20000, n * 2);
+  return curve.getSpacedPoints(n).map((v) => [v.x, v.z]);
+}
+
+// 道すじの上の位置を、前回の場所から探して速く取り出す
+class PathSampler {
+  constructor(pts) { this.pts = pts; this.cum = cumulative(pts); this.total = this.cum[this.cum.length - 1]; this.i = 1; }
+  at(s) {
+    const { pts, cum } = this;
+    s = Math.max(0, Math.min(this.total, s));
+    while (this.i < cum.length - 1 && cum[this.i] < s) this.i++;
+    while (this.i > 1 && cum[this.i - 1] > s) this.i--;
+    const a = pts[this.i - 1], b = pts[this.i];
+    const t = Math.max(0, Math.min(1, (s - cum[this.i - 1]) / (cum[this.i] - cum[this.i - 1] || 1e-6)));
+    return { x: a[0] + (b[0] - a[0]) * t, z: a[1] + (b[1] - a[1]) * t, dir: Math.atan2(b[0] - a[0], b[1] - a[1]) };
+  }
+}
+
+const smooth01 = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * x * (x * (x * 6 - 15) + 10); };   // なめらかな0→1
+const angDiff = (a, b) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; };
+
 export class Transport {
   constructor(scene, world, index, proj, data) {
     this.scene = scene;
@@ -211,20 +240,41 @@ export class Ride {
     this.state = "loading";
     const leg = await this.nextLeg();
     if (!leg) { this.finish(); return; }
-    const pts = leg.pts.length > 1 ? densify(leg.pts, this.kind === "train" ? 1 : 4) : leg.pts;
+    const pts = leg.pts.length > 1 ? (this.kind === "train" ? densify(leg.pts, 1) : smoothPath(leg.pts, 2)) : leg.pts;
     this.leg = { ...leg, pts, cum: cumulative(pts) };
     this.leg.total = this.leg.cum[this.leg.cum.length - 1];
+    this.sampler = new PathSampler(pts);
     this.s = 0;
+    this.vel = 0;
+    this.heading = null;
+    this.roll = 0;
+    if (this.kind === "air") {
+      // 高さの計画：滑走 → なめらかに上昇 → 巡航 → なめらかに降下 → 着地
+      const T = this.leg.total;
+      this.cruise = Math.max(30, Math.min(140, T * 0.09));
+      this.liftAt = 60;                                   // 滑走して離陸する位置
+      this.touchAt = T - 40;                              // 着地する位置
+      this.climbLen = Math.max(80, Math.min(900, (this.touchAt - this.liftAt) * 0.32));
+      this.descLen = Math.max(100, Math.min(1100, (this.touchAt - this.liftAt) * 0.38));
+    }
     this.state = "moving";
+  }
+
+  // 飛行機の高さ（道のりの位置 s での高さ）
+  altAt(s) {
+    const up = smooth01((s - this.liftAt) / this.climbLen);
+    const down = smooth01((this.touchAt - s) / this.descLen);
+    return 0.4 + this.cruise * Math.min(up, down);
   }
 
   update(dt) {
     if (this.done || !this.leg) return;
     const L = this.leg;
+    if (this.kind !== "train") { this._updateSmooth(dt); return; }
     if (this.state === "moving") {
       // 区間の最初と最後はゆっくり
       const edge = Math.min(this.s, L.total - this.s);
-      const k = this.kind === "air" ? 1 : Math.max(0.3, Math.min(1, edge / 8 + 0.25));
+      const k = Math.max(0.3, Math.min(1, edge / 8 + 0.25));
       this.s = Math.min(L.total, this.s + this.speed * k * dt);
       if (this.s >= L.total - 0.01) {
         this.state = "stopped";
@@ -239,26 +289,66 @@ export class Ride {
       }
     }
     const p = sampleAt(L.pts, L.cum, Math.max(0.01, Math.min(L.total - 0.01, this.s)));
-    let y = 0.15;
-    if (this.kind === "train" && L.elevated) y = 2.6;
-    if (this.kind === "ship") y = -0.35 + Math.sin(performance.now() / 500) * 0.06;
-    if (this.kind === "air") {
-      const up = Math.min(this.s - 25, L.total - 30 - this.s);
-      y = 0.4 + Math.max(0, Math.min(140, up * 0.55));
-      this.altitude = y;
-      this.cars[0].scale.setScalar(1.6 + (y / 140) * 2.4);   // 高く飛ぶほど大きく見せる
-    }
+    const y = L.elevated ? 2.6 : 0.15;
     this.pos.set(p.x, y, p.z);
     this.dir = p.dir;
     this.cars.forEach((car, i) => {
       const q = sampleAt(L.pts, L.cum, Math.max(0.01, Math.min(L.total - 0.01, this.s - i * 2.45)));
       car.position.set(q.x, y, q.z);
       car.rotation.set(0, q.dir, 0);
-      if (this.kind === "air") {
-        const climb = this.s < L.total / 2 ? (y < 139 && y > 0.5 ? -0.25 : 0) : (y > 0.5 && y < 139 ? 0.2 : 0);
-        car.rotation.x = climb;
-      }
     });
+  }
+
+  // 飛行機・船：速さ・向き・高さ・傾きを、すべてなめらかに変える
+  _updateSmooth(dt) {
+    const L = this.leg, T = L.total, air = this.kind === "air";
+    if (this.state === "moving") {
+      // 速さの目標：出発はゆっくり加速、到着前はゆっくり減速
+      const accel = air ? Math.min(260, T * 0.12) : Math.min(120, T * 0.15);
+      const decel = air ? Math.min(420, T * 0.18) : Math.min(160, T * 0.18);
+      const k = Math.min(smooth01(this.s / accel) * 0.94 + 0.06, smooth01((T - this.s) / decel) * 0.92 + 0.08);
+      const target = this.speed * k;
+      this.vel += (target - this.vel) * (1 - Math.exp(-3 * dt));
+      this.s = Math.min(T, this.s + Math.max(air ? 4 : 2, this.vel) * dt);
+      if (this.s >= T - 0.05) {
+        this.state = "stopped";
+        this.wait = 0.8;
+        this.onStop(L.stopName, true);
+      }
+    } else if (this.state === "stopped") {
+      this.wait -= dt;
+      if (this.wait <= 0) { this.finish(); return; }
+    }
+    const sp = this.sampler;
+    const p = sp.at(this.s);
+    // 向き：少し先の点を見て、急に向きが変わらないように追いかける
+    const ahead = sp.at(this.s + (air ? 18 : 10));
+    const want = Math.atan2(ahead.x - p.x, ahead.z - p.z) || p.dir;
+    if (this.heading == null) this.heading = want;
+    const turn = angDiff(this.heading, want);
+    this.heading += turn * (1 - Math.exp(-(air ? 3 : 2) * dt));
+    // 傾き（旋回の向きに少しだけ傾ける）
+    const rollWant = Math.max(-0.45, Math.min(0.45, -turn * (air ? 1.6 : 0.6)));
+    this.roll += (rollWant - this.roll) * (1 - Math.exp(-3 * dt));
+    let y, pitch = 0;
+    const now = performance.now() / 1000;
+    if (air) {
+      y = this.altAt(this.s);
+      const dy = (this.altAt(this.s + 3) - this.altAt(this.s - 3)) / 6;   // 上がり具合
+      pitch = Math.max(-0.3, Math.min(0.3, -Math.atan(dy) * 1.2));
+      this.altitude = y;
+      this.cars[0].scale.setScalar(1.6 + (y / 140) * 2.4);   // 高く飛ぶほど大きく見せる
+    } else {
+      y = -0.35 + Math.sin(now * 1.3) * 0.06;
+      pitch = Math.sin(now * 0.9) * 0.025;
+      this.roll += Math.sin(now * 0.7) * 0.0008;
+    }
+    this.pos.set(p.x, y, p.z);
+    this.dir = this.heading;
+    const car = this.cars[0];
+    car.rotation.order = "YXZ";
+    car.position.set(p.x, y, p.z);
+    car.rotation.set(pitch, this.heading, this.roll + (air ? 0 : Math.sin(now * 0.8) * 0.03));
   }
 
   progressText() {
