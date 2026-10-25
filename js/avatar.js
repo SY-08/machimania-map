@@ -36,6 +36,7 @@ export function sanitizeAvatar(a) {
     skin: color(a.skin, o.skin), hair: id(a.hair, o.hair), hairColor: color(a.hairColor, o.hairColor),
     eyes: id(a.eyes, o.eyes), mouth: id(a.mouth, o.mouth), shirt: color(a.shirt, o.shirt), pants: color(a.pants, o.pants),
     height: Math.max(0.85, Math.min(1.15, Number(a.height) || 1)), glasses: !!a.glasses,
+    camera: a.camera !== false,   // 公式アカウントだけに表示される「首から下げたカメラ」（公式の人が外すこともできる）
   };
 }
 
@@ -272,7 +273,7 @@ export class Avatar {
     this.head = buildHead(c);
     this.head.position.y = 1.4 + HEAD_R * 0.92;
     body.add(this.head);
-    if (this.official) body.add(ownerCamera());
+    if (this.official && c.camera) body.add(ownerCamera());
     body.scale.setScalar(c.height);
     this.body = body;
     this.root.add(body);

@@ -350,6 +350,7 @@ export function openAvatarEditor({ name = "", avatar, firstTime = false, nameLoc
         <section><h4>ズボン</h4>${sw("pants", o.pants)}</section>
         <section><h4>せの高さ</h4><input type="range" id="avHeight" min="0.85" max="1.15" step="0.01" value="${cfg.height}" aria-label="せの高さ"></section>
         <section><label class="field" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="avGlasses" ${cfg.glasses ? "checked" : ""}> <b>メガネ</b></label></section>
+        ${official ? `<section class="official-opt"><label class="field" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="avCamera" ${cfg.camera ? "checked" : ""}> <b>📷 カメラを首から下げる</b></label><small>★公式（まちマニア横塚さん）だけの目印です。参加者には表示されません。</small></section>` : ""}
       </div>
     </div>
     <p class="note">名前に本名や学校名などの個人情報は入れないでください。</p>
@@ -391,6 +392,7 @@ export function openAvatarEditor({ name = "", avatar, firstTime = false, nameLoc
   const refresh = () => {
     m.el.querySelectorAll("[data-key]").forEach((box) => box.querySelectorAll("[data-v]").forEach((x) => x.setAttribute("aria-pressed", String(cfg[box.dataset.key] === x.dataset.v))));
     $("#avGlasses", m.el).checked = cfg.glasses;
+    if ($("#avCamera", m.el)) $("#avCamera", m.el).checked = cfg.camera;
   };
   $("#avPhotoBtn", m.el).addEventListener("click", () => $("#avPhoto", m.el).click());
   $("#avPhoto", m.el).addEventListener("change", async (e) => {
@@ -413,6 +415,7 @@ export function openAvatarEditor({ name = "", avatar, firstTime = false, nameLoc
   });
   $("#avHeight", m.el).addEventListener("input", (e) => { cfg.height = +e.target.value; av.setConfig(cfg, ""); });
   $("#avGlasses", m.el).addEventListener("change", (e) => { cfg.glasses = e.target.checked; av.setConfig(cfg, ""); });
+  $("#avCamera", m.el)?.addEventListener("change", (e) => { cfg.camera = e.target.checked; av.setConfig(cfg, ""); });
   $("#avSave", m.el).addEventListener("click", () => {
     const nm = $("#avName", m.el).value.replace(/\s+/g, " ").trim().slice(0, 12);
     if (!nm) { toast("なまえを入れてください"); $("#avName", m.el).focus(); return; }
