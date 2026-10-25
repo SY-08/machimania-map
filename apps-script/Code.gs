@@ -21,7 +21,7 @@
 const SHEETS = {
   shops: {
     name: "新店",
-    headers: ["ID", "店名", "ジャンル", "都道府県", "市区町村", "住所", "緯度", "経度", "開店日", "状態", "概要", "背景", "情報源URL", "見つけた日", "表示", "メモ"],
+    headers: ["ID", "店名", "ジャンル", "都道府県", "市区町村", "住所", "緯度", "経度", "開店日", "状態", "概要", "背景", "情報源URL", "見つけた日", "表示", "メモ", "個人店の根拠"],
   },
   posts: {
     name: "投稿",
@@ -101,8 +101,14 @@ function importResearchInbox() {
   const inbox = githubGetJson_("data/research-inbox.json");
   if (!inbox || !Array.isArray(inbox.items)) return 0;
   const sh = sheet_(SHEETS.shops);
+  // 基準（個人オーナー店）に合わないとわかった店は、シートから消して二度と取りこまない
+  const excluded = new Set((inbox.excluded || []).map(String));
+  if (excluded.size) {
+    const ids = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues() : [];
+    for (let i = ids.length - 1; i >= 0; i--) if (excluded.has(String(ids[i][0]))) sh.deleteRow(i + 2);
+  }
   const rows = readRows_(sh, SHEETS.shops);
-  const seen = new Set(rows.map((r) => r["ID"]));
+  const seen = new Set([...rows.map((r) => r["ID"]), ...excluded]);
   const seenKey = new Set(rows.map((r) => norm_(r["店名"]) + "|" + norm_(r["住所"])));
   const out = [];
   for (const it of inbox.items) {
@@ -122,7 +128,7 @@ function importResearchInbox() {
       "都道府県": it.pref || "", "市区町村": it.city || "", "住所": it.address || "",
       "緯度": it.lat, "経度": it.lng, "開店日": it.opened || "", "状態": "",
       "概要": it.summary || "", "背景": it.background || "", "情報源URL": (it.sources || []).join("\n"),
-      "見つけた日": it.found || today_(), "表示": true, "メモ": it.note || "",
+      "見つけた日": it.found || today_(), "表示": true, "メモ": it.note || "", "個人店の根拠": it.owner || "",
     })[h]));
   }
   if (out.length) sh.getRange(sh.getLastRow() + 1, 1, out.length, SHEETS.shops.headers.length).setValues(out);
