@@ -286,7 +286,7 @@ export class Avatar {
     if (this.star) { this.group.remove(this.star); this.star = null; }
     if (this.official) {
       this.star = makeStar();
-      this.star.position.y = 3.55 * c.height;
+      this.star.position.y = 3.95 * c.height;
       this.group.add(this.star);
     }
     if (this.showName && name) {
