@@ -175,8 +175,18 @@ def ask_ai(title, url, text):
     for attempt in range(3):
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
-                res = json.loads(r.read().decode("utf-8"))
-            return json.loads(res["choices"][0]["message"]["content"])
+                raw = r.read().decode("utf-8", "replace")
+            try:
+                res = json.loads(raw)
+                content = res["choices"][0]["message"].get("content") or ""
+            except Exception:
+                LAST_AI_ERROR["msg"] = "応答が読めない: " + raw[:150]
+                return None
+            m = re.search(r"\{.*\}", content, re.S)   # ```json … ``` で囲まれていても取り出す
+            if not m:
+                LAST_AI_ERROR["msg"] = "JSONがない: " + content[:150]
+                return None
+            return json.loads(m.group(0))
         except urllib.error.HTTPError as e:
             msg = e.read().decode("utf-8", "replace")[:300]
             if e.code == 429:
