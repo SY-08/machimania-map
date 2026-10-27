@@ -2,12 +2,13 @@
 import { CONFIG } from "./config.js";
 import { Projector } from "./geo.js";
 import { World } from "./world.js";
-import { KINDS, MODES, seasonPalette } from "./style.js";
+import { KINDS, MODES, GENRES, seasonPalette } from "./style.js";
 
 const SEASON_NAME = seasonPalette().name;
 import { parseSns } from "./media.js";
 import { Transport, Ride } from "./transport.js";
 import { Guide } from "./guide.js";
+import { TownGuide, Dialogue, GUIDE_NAME } from "./npc.js";
 import { Avatar, randomAvatar, sanitizeAvatar } from "./avatar.js";
 import { LocalNet, SupabaseNet } from "./net.js";
 import { checkNick, checkPass } from "./account.js";
@@ -212,6 +213,10 @@ async function boot() {
   myAvatar.group.position.set(me.x, 0, me.z);
   myAvatar.addTo(scene);
   const transport = new Transport(scene, W, index, proj, transportData);
+  const townGuide = new TownGuide(scene);
+  const dialog = new Dialogue();
+  let talkBlend = 0, talkWith = null;
+  $("#talkBtn").addEventListener("click", () => startTalk());
   const guide = new Guide();
   const selfTarget = { av: myAvatar, bubble: null };
 
@@ -687,6 +692,8 @@ async function boot() {
       if (e.key === "Escape") e.target.blur();
       return;
     }
+    if (dialog.open) return;
+    if ((e.code === "Space" || e.code === "KeyF") && !$("#talkBtn").hidden) { e.preventDefault(); startTalk(); return; }
     if (e.key === "Enter") { e.preventDefault(); $("#chatInput").focus(); return; }
     if (e.key === "m" || e.key === "M") { $("#mapToggle").click(); return; }
     keys.add(e.code);
@@ -797,7 +804,7 @@ async function boot() {
   // ------------------------------------------------------------ ループ
   const camTarget = new THREE.Vector3(me.x, 1.6, me.z);
   const camPos = new THREE.Vector3();
-  let lastArea = null, saveT = 0, ensureT = 0, rideBtnT = 0, last = performance.now(), t = 0;
+  let lastArea = null, saveT = 0, ensureT = 0, rideBtnT = 0, last = performance.now(), t = 0, guideT = 1;
 
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
@@ -815,6 +822,7 @@ async function boot() {
       if (keys.has("KeyE")) { yaw -= dt * 1.6; lastUserCam = now; }
     }
     if (joy.id !== null) { ix += joy.x; iz += -joy.y; }
+    if (dialog.open) { ix = iz = 0; walkTarget = null; marker.visible = false; }
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw);   // カメラの向く方向（前）
     const rx = Math.cos(yaw), rz = -Math.sin(yaw);    // 右
     let dx = fx * iz + rx * ix, dz = fz * iz + rz * ix;
@@ -885,18 +893,36 @@ async function boot() {
     const camY = ride ? ride.pos.y + 1.6 : 1.6;
     if (ride && Math.hypot(camTarget.x - me.x, camTarget.z - me.z) > 60) camTarget.set(me.x, camY, me.z);
     camTarget.lerp(new THREE.Vector3(me.x, camY, me.z), 1 - Math.exp(-10 * dt));
-    const dist = 21 * zoom + (ride ? (ride.kind === "train" ? 10 : ride.kind === "ship" ? 18 : 30 + (ride.altitude || 0) * 1.4) : 0);
+    let dist = 21 * zoom + (ride ? (ride.kind === "train" ? 10 : ride.kind === "ship" ? 18 : 30 + (ride.altitude || 0) * 1.4) : 0);
+    // 会話中はカメラがふたりに寄る（肩ごしに、話し相手を見る画角）
+    talkBlend += ((dialog.open ? 1 : 0) - talkBlend) * (1 - Math.exp(-4 * dt));
+    let camYaw = yaw, camPitch = pitch, look = camTarget;
+    if (talkBlend > 0.002 && talkWith) {
+      const b = talkBlend * talkBlend * (3 - 2 * talkBlend);
+      const nx = talkWith.x, nz = talkWith.z;
+      const tx = me.x + (nx - me.x) * 0.55, tz = me.z + (nz - me.z) * 0.55;
+      const away = Math.atan2(me.x - nx, me.z - nz);           // 話し相手から見た自分の方向
+      look = new THREE.Vector3(camTarget.x + (tx - camTarget.x) * b, camTarget.y + (1.45 - camTarget.y) * b, camTarget.z + (tz - camTarget.z) * b);
+      dist += (6.2 - dist) * b;
+      camPitch += (0.2 - camPitch) * b;
+      camYaw = lerpAngle(yaw, away + 0.62, b);
+    }
     camPos.set(
-      camTarget.x + Math.sin(yaw) * Math.cos(pitch) * dist,
-      camTarget.y + Math.sin(pitch) * dist,
-      camTarget.z + Math.cos(yaw) * Math.cos(pitch) * dist,
+      look.x + Math.sin(camYaw) * Math.cos(camPitch) * dist,
+      look.y + Math.sin(camPitch) * dist,
+      look.z + Math.cos(camYaw) * Math.cos(camPitch) * dist,
     );
     camera.position.copy(camPos);
-    camera.lookAt(camTarget);
+    camera.lookAt(look);
     sun.position.set(me.x + 28, 52, me.z + 18);
     sun.target.position.set(me.x, 0, me.z);
 
     W.update(dt, t, me.x, me.z);
+    townGuide.update(dt, me, (x, z) => W.walkable(x, z));
+    guideT += dt;
+    if (guideT > 1 && !ride && !dialog.open) { guideT = 0; placeGuide(); }
+    const nearGuide = townGuide.group.visible && !ride && !dialog.open && !anyModalOpen() && townGuide.distTo(me.x, me.z) < 4.5;
+    if ($("#talkBtn").hidden === nearGuide) $("#talkBtn").hidden = !nearGuide;
     ensureT += dt;
     const fastSea = ride && ride.kind === "ship" && ride.speed > 150;
     if (ensureT > 0.7 && !flying && !fastSea) {
@@ -1276,11 +1302,214 @@ async function boot() {
     if (guestMode) setTimeout(() => toast("ゲストで見学中です。ニックネームとパスワードだけで登録すると、チャットと投稿ができます（右上の🔑から）", 7000), 2500);
   }
   setupModesAndPosts();
+  setupNews();
+
+  // ------------------------------------------------------------ まちの案内人（どの市区町村にも、駅前に同じ人がいる）
+  function placeGuide() {
+    const area = W.areaAt(me.x, me.z);
+    const code = area ? area.pref + area.name : W.tileKeyAt(me.x, me.z);
+    const far = townGuide.group.visible ? townGuide.distTo(me.x, me.z) : Infinity;
+    if (townGuide.areaCode === code && far < 260) return;
+    // いちばん近い駅の駅前（同じ市区町村の中）。なければ自分の少し先
+    let best = null, bd = Infinity;
+    for (const st of W.stations) {
+      const p = st.front || st.pos;
+      const d = Math.hypot(p[0] - me.x, p[1] - me.z);
+      if (d > 240 || d >= bd) continue;
+      const a = W.areaAt(p[0], p[1]);
+      if (area && (!a || a.code !== area.code)) continue;
+      bd = d; best = p;
+    }
+    let pos = best ? findWalkable(best[0] + 3, best[1] + 2, 12) : null;
+    if (!pos) pos = findWalkable(me.x + Math.sin(me.ry) * 9, me.z + Math.cos(me.ry) * 9, 15);
+    if (pos) townGuide.place(pos[0], pos[1], code);
+  }
+
+  function townFacts() {
+    const area = W.areaAt(me.x, me.z);
+    const name = area ? `${area.pref}${area.name}` : "このあたり";
+    const near = [];
+    for (const s of index.stations) {
+      const d = Math.hypot(s.p[0] - me.x, s.p[1] - me.z);
+      if (d > 220) continue;
+      const a = W.areaAt(s.p[0], s.p[1]);
+      if (area && a && a.code !== area.code) continue;
+      near.push({ s, d });
+    }
+    near.sort((a, b) => a.d - b.d);
+    const lines = [...new Set(near.flatMap((n) => n.s.l))];
+    const shops = W.shopObjs.map((o) => ({ o, d: Math.hypot(o.x - me.x, o.z - me.z) })).filter((x) => x.d < 900).sort((a, b) => a.d - b.d);
+    const port = transport.ports?.find?.((p) => Math.hypot(p.pos[0] - me.x, p.pos[1] - me.z) < 400);
+    const air = transport.airports?.find?.((p) => Math.hypot(p.pos[0] - me.x, p.pos[1] - me.z) < 500);
+    return { area, name, stations: near.map((n) => n.s.n), lines, shops, port, air };
+  }
+
+  async function startTalk() {
+    if (dialog.open || ride) return;
+    talkWith = townGuide;
+    townGuide.talking = true;
+    townGuide.cheer();
+    walkTarget = null; marker.visible = false;
+    me.ry = Math.atan2(townGuide.x - me.x, townGuide.z - me.z);
+    card.hidden = true; cardShop = null;
+    $("#talkBtn").hidden = true;
+    guide.close();
+    dialog.show(GUIDE_NAME);
+    setTags(false);
+    const who = isMember() ? `${profile.name}さん` : "ゲストさん";
+    const f = townFacts();
+    try {
+      await dialog.say(`あっ、${who}！ こんにちは。\nわたしは案内人の${GUIDE_NAME}。${f.name}へようこそ！`);
+      let first = true;
+      for (;;) {
+        const pick = await dialog.say(first ? "なにか聞きたいことはある？" : "ほかに聞きたいことはある？", [
+          { label: "この町のこと", value: "town" },
+          { label: "近くのお店", value: "shops" },
+          { label: "あそびかた", value: "howto" },
+          { label: "またね", value: "bye" },
+        ]);
+        first = false;
+        if (pick === "town") await talkTown(f);
+        else if (pick === "shops") { const go = await talkShops(f); if (go) return; }
+        else if (pick === "howto") await talkHowto();
+        else break;
+      }
+      await dialog.say(`またいつでも話しかけてね。${f.area ? f.area.name : "このまち"}を楽しんで！`);
+    } finally {
+      dialog.hide();
+      setTags(true);
+      townGuide.talking = false;
+      setTimeout(() => { if (!dialog.open) talkWith = null; }, 1200);
+    }
+  }
+
+  // 会話中は名札をかくして、ふたりが見えるようにする
+  function setTags(on) {
+    if (myAvatar.tag) myAvatar.tag.visible = on;
+    if (myAvatar.navi) myAvatar.navi.hiddenForTalk = !on;
+    for (const p of peers.values()) if (p.av.tag) p.av.tag.visible = on;
+    townGuide.tag.visible = on;
+  }
+
+  async function talkTown(f) {
+    const season = SEASON_NAME;
+    if (f.stations.length) {
+      await dialog.say(`${f.name}には、${f.stations.slice(0, 3).join("駅、")}駅${f.stations.length > 3 ? `など、${f.stations.length}の駅` : ""}があるよ。`);
+      if (f.lines.length) await dialog.say(`走っているのは ${f.lines.slice(0, 4).join("・")}${f.lines.length > 4 ? " など" : ""}。駅の前で「電車に乗る」を押すと、線路をたどって旅ができるんだ。`);
+    } else {
+      await dialog.say(`${f.name}は、駅から少しはなれた静かなところだね。`);
+    }
+    if (f.air) await dialog.say(`近くに${f.air.name}があるよ。飛行機で日本の空を飛べるんだ！`);
+    if (f.port) await dialog.say(`${f.port.name}からは船も出ているよ。`);
+    const kinds = { youtube: 0, new: 0, old: 0, community: 0 };
+    for (const x of f.shops) kinds[x.o.kind] = (kinds[x.o.kind] || 0) + 1;
+    const total = f.shops.length;
+    await dialog.say(total
+      ? `このまわりには、いま${total}軒のお店が建っているよ。${kinds.youtube ? `まちマニア横塚さんの動画のお店が${kinds.youtube}軒、` : ""}${kinds.new ? `新しいお店が${kinds.new}軒、` : ""}${kinds.community ? `みんなの口コミのお店が${kinds.community}軒` : ""}あるんだ。`
+      : "このまわりには、まだお店が建っていないんだ。行ったお店があったら、口コミを投稿して最初のお店を建ててみて！");
+    if (season) await dialog.say(`いまは${season}。木や花の色も、季節に合わせて変わっているでしょ？`);
+  }
+
+  async function talkShops(f) {
+    const list = f.shops.slice(0, 3);
+    if (!list.length) {
+      await dialog.say("近くにはまだお店がないんだ。右上の「お店」ボタンで、全国のお店をさがせるよ。");
+      return false;
+    }
+    const lines = list.map((x) => `・${x.o.shop.name}（${KINDS[x.o.kind]?.short || ""}、${x.d < 60 ? "すぐそこ" : `${Math.round((x.d * 40) / 100) / 10}km`}）`).join("\n");
+    const pick = await dialog.say(`近くのおすすめはこのあたり！\n${lines}`, [
+      ...list.map((x, i) => ({ label: `${x.o.shop.name}へ行く`, value: "s" + i })),
+      { label: "もどる", value: "back" },
+    ]);
+    if (!pick || pick === "back") return false;
+    const o = list[+pick.slice(1)].o;
+    await dialog.say(`${o.shop.name}だね。いってらっしゃい！`);
+    dialog.hide();
+    setTags(true);
+    townGuide.talking = false;
+    talkWith = null;
+    const fa = ((o.shop.facing || 0) * Math.PI) / 180;
+    dismissed = null;
+    await teleport(o.x + Math.sin(fa) * 5.5, o.z + Math.cos(fa) * 5.5, `${o.shop.name} に着きました`);
+    me.ry = fa + Math.PI;
+    return true;
+  }
+
+  async function talkHowto() {
+    const touch = matchMedia("(pointer: coarse)").matches;
+    const pages = [
+      touch ? "行きたい場所をタップすると、そこまで歩くよ。左下のスティックでも歩けるんだ。" : "行きたい場所をクリックすると歩くよ。WASD や矢印キーでも歩けて、Shift で走れるんだ。",
+      touch ? "1本指でなぞるとカメラが回って、2本指でつまむとズームできるよ。" : "ドラッグでカメラを回して、ホイールでズームできるよ。",
+      "お店に近づくと説明が出るよ。黄色はまちマニア横塚さんの動画のお店、赤は新しいお店、紫は開店1年以上、青はみんなの口コミのお店！",
+      "左の「新店のお知らせ」に、毎日見つかった新しいお店が出るよ。「ワープ」を押すと、そのお店の前にひとっとび！",
+      "駅・空港・港では乗り物に乗れるよ。電車は行き先の駅名を入れてもいいんだ。",
+      isMember() ? "行ったお店があったら「投稿」で口コミを書いてね。チャットで近くの人と話すこともできるよ。" : "ニックネームとパスワードだけで登録すると、口コミの投稿やチャットができるようになるよ。右上の🔑からどうぞ！",
+      "わからなくなったら、右上の「？」でナビにも聞けるからね。",
+    ];
+    for (const p of pages) await dialog.say(p);
+  }
+
+  // ------------------------------------------------------------ 新店のお知らせ（毎日の新店リサーチで増えた店）
+  function setupNews() {
+    const box = $("#news"), list = $("#newsList"), toggle = $("#newsToggle"), badge = $("#newsBadge");
+    const items = (researchData.shops || [])
+      .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng))
+      .sort((a, b) => String(b.found || "").localeCompare(String(a.found || "")) || String(b.opened || "").localeCompare(String(a.opened || "")))
+      .slice(0, 40);
+    box.hidden = false;
+    const seen = new Set(store.get("newsSeen") || []);
+    const today = Date.now();
+    const md = (d) => { const m = String(d || "").match(/^\d{4}-(\d{2})-(\d{2})/); return m ? `${+m[1]}/${+m[2]}` : ""; };
+    if (!items.length) {
+      list.innerHTML = `<li class="news-empty">新しいお店が見つかると、ここでお知らせします。</li>`;
+    } else {
+      list.innerHTML = items.map((s) => {
+        const g = GENRES[s.genre] || GENRES.other;
+        const opened = s.opened ? (Date.parse(s.opened) > today ? `${md(s.opened)}オープン予定` : `${md(s.opened)}オープン`) : "";
+        const fresh = !seen.has(s.id) && s.found && today - Date.parse(s.found) < 7 * 86400000;
+        return `<li class="news-item">
+          <span class="em" aria-hidden="true">${g.emoji}</span>
+          <span class="t"><b>${fresh ? `<span class="new">NEW</span>` : ""}${esc(s.name)}</b><small>${esc([s.pref, s.city].filter(Boolean).join(" ") || g.label)}${opened ? "・" + esc(opened) : ""}</small></span>
+          <button type="button" class="btn sun go" data-warp="${esc(s.id)}" aria-label="${esc(s.name)}へワープ">ワープ</button>
+        </li>`;
+      }).join("");
+    }
+    const unseen = items.filter((s) => !seen.has(s.id)).length;
+    const setBadge = (n) => { badge.hidden = !n; badge.textContent = n > 99 ? "99+" : String(n); };
+    setBadge(unseen);
+    // 開いているかどうか（スマホははじめ閉じておく）
+    let open = store.get("newsOpen");
+    if (open == null) open = !matchMedia("(max-width: 640px)").matches;
+    const apply = () => {
+      toggle.setAttribute("aria-expanded", String(open));
+      list.hidden = !open;
+      if (open) { store.set("newsSeen", items.map((s) => s.id)); setBadge(0); }
+    };
+    apply();
+    toggle.addEventListener("click", () => { open = !open; store.set("newsOpen", open); apply(); });
+    list.addEventListener("click", async (e) => {
+      const b = e.target.closest("[data-warp]");
+      if (!b) return;
+      const s = items.find((x) => x.id === b.dataset.warp);
+      if (!s) return;
+      const o = W.shopObjs.find((x) => x.shop.id === s.id);
+      if (mode === "community") setMode("standard");
+      if (o) {
+        const f = ((o.shop.facing || 0) * Math.PI) / 180;
+        dismissed = null;
+        await teleport(o.x + Math.sin(f) * 5.5, o.z + Math.cos(f) * 5.5, `${s.name} に着きました`);
+        me.ry = f + Math.PI;
+      } else {
+        const [x, z] = proj.xz(s.lat, s.lng);
+        await teleport(x, z + 5.5, `${s.name} に着きました`);
+      }
+    });
+  }
   // はじめての人には、ナビが使い方を案内する
   if (!store.get("welcomed")) {
     setTimeout(() => { guide.welcome(); store.set("welcomed", true); }, 900);
   }
-  window.__machimania = { me, peers, W, net, teleport, renderer, setMode: (m) => setMode(m), transport, guide, startTrain, startFlight, startShip, get ride() { return ride; } }; // 動作確認用
+  window.__machimania = { me, peers, W, net, teleport, renderer, setMode: (m) => setMode(m), transport, guide, guide2: townGuide, startTalk, startTrain, startFlight, startShip, get ride() { return ride; } }; // 動作確認用
 }
 
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }

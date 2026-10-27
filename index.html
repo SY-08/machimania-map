@@ -263,6 +263,10 @@ kbd { display: inline-block; border: 2px solid var(--ink); border-bottom-width: 
   .editor { grid-template-columns: 1fr; }
   .preview { width: 150px; justify-self: center; }
   .hud-tl { max-width: calc(100vw - 190px); }
+  .news { width: calc(100vw - 190px); }
+  .news-list { max-height: 236px; }
+  .news-item { grid-template-columns: 1fr auto; padding: 6px; }
+  .news-item .em { display: none; }
   .chip { font-size: 11.5px; padding: 3px 9px; }
   .shop-card { left: 50%; right: auto; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom, 0px)); animation: none; }
   .shop-thumb { aspect-ratio: 4 / 1; }
@@ -275,6 +279,23 @@ kbd { display: inline-block; border: 2px solid var(--ink); border-bottom-width: 
 }
 
 /* ---------------- まちマニアMAP 追加 */
+.news { width: min(310px, calc(100vw - 24px)); padding: 0; overflow: hidden; pointer-events: auto; border-radius: 16px; }
+.news-head { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; font-weight: 800; font-size: 13.5px; }
+.news-head:focus-visible { outline: 3px solid var(--sun); outline-offset: -3px; }
+.news-head span { flex: 1; }
+.news-head .chev { font-style: normal; transition: transform .2s; }
+.news-head[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+.news-badge { background: var(--coral, #ef6b5b); color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 7px; }
+.news-list { list-style: none; margin: 0; padding: 0 8px 8px; max-height: 292px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; overscroll-behavior: contain; }
+.news-list[hidden] { display: none !important; }
+.news-item { display: grid; grid-template-columns: 30px 1fr auto; gap: 8px; align-items: center; padding: 7px 8px; border-radius: 12px; background: rgba(255,255,255,.75); border: 2px solid rgba(59,52,39,.12); min-height: 50px; }
+.news-item .em { font-size: 20px; text-align: center; }
+.news-item .t { min-width: 0; }
+.news-item .t b { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.news-item .t small { display: block; font-size: 11px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.news-item .new { display: inline-block; font-size: 9.5px; font-weight: 900; background: var(--coral, #ef6b5b); color: #fff; border-radius: 6px; padding: 0 5px; margin-right: 4px; vertical-align: 1px; }
+.news-item .go { padding: 5px 9px; font-size: 12px; min-height: 0; }
+.news-empty { font-size: 12px; color: var(--ink-soft); padding: 4px 6px 8px; }
 .logo small { font-family: var(--font-ui); font-weight: 800; font-size: 12px; margin-left: 4px; letter-spacing: .08em; vertical-align: 3px; color: var(--ink-soft); }
 #loading .big small { font-family: var(--font-ui); font-weight: 800; font-size: 18px; margin-left: 6px; color: var(--ink-soft); }
 .modebar { display: flex; gap: 4px; padding: 4px; border-radius: 999px; pointer-events: auto; }
@@ -365,6 +386,51 @@ kbd { display: inline-block; border: 2px solid var(--ink); border-bottom-width: 
 .post-form .radio.big span { display: flex; flex-direction: column; }
 .post-form .radio.big:has(input:checked) { background: #eaf3fd; }
 
+/* ---------------- 案内人との会話（カメラが寄って、吹き出しの会話ウィンドウ） */
+.talk-btn { background: #c9f0d4; }
+.talk { position: fixed; inset: 0; z-index: 30; pointer-events: auto; cursor: pointer; }
+.talk-bar { position: absolute; left: 0; right: 0; height: 9vh; background: #1d1a15; animation: barIn .45s ease-out both; }
+.talk-bar.top { top: 0; transform-origin: top; }
+.talk-bar.bottom { bottom: 0; transform-origin: bottom; }
+@keyframes barIn { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.talk-box {
+  position: absolute; left: 50%; bottom: calc(9vh + 18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  width: min(720px, calc(100vw - 28px)); min-height: 112px; box-sizing: border-box; padding: 26px 26px 22px;
+  background: #fffaf0; border: 4px solid var(--ink); border-radius: 34px 34px 30px 30px / 30px 30px 34px 34px;
+  box-shadow: 0 6px 0 rgba(0,0,0,.25); animation: boxIn .35s cubic-bezier(.2,1.4,.4,1) both .15s;
+}
+.talk-box::before {   /* 吹き出しのしっぽ（話している人のほうへ） */
+  content: ""; position: absolute; top: -20px; left: 22%; width: 30px; height: 24px; background: #fffaf0;
+  border-left: 4px solid var(--ink); border-top: 4px solid var(--ink); transform: skewX(-25deg) rotate(8deg); border-radius: 6px 0 0 0;
+}
+@keyframes boxIn { from { opacity: 0; transform: translate(-50%, 18px) scale(.94); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+.talk-name {
+  position: absolute; top: -18px; left: 26px; background: #7bd389; color: #1d3b25; border: 3px solid var(--ink);
+  border-radius: 999px; padding: 3px 16px; font-weight: 900; font-size: 15px; transform: rotate(-4deg); box-shadow: 0 3px 0 rgba(0,0,0,.2);
+}
+.talk-text { margin: 0; font-size: 18px; line-height: 1.7; font-weight: 700; white-space: pre-wrap; min-height: 3.4em; }
+.talk-next { position: absolute; right: 26px; bottom: 12px; color: #ef8a3c; font-size: 16px; animation: nextBob .8s ease-in-out infinite; }
+@keyframes nextBob { 50% { transform: translateY(4px); } }
+.talk-choices {
+  position: absolute; right: max(16px, calc(50% - 360px)); bottom: calc(9vh + 150px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 8px; align-items: stretch; min-width: 200px;
+}
+.talk-choices:empty { display: none; }
+.talk-choices button {
+  font: inherit; font-weight: 800; font-size: 16px; text-align: left; padding: 10px 20px 10px 34px; position: relative;
+  background: #fffaf0; border: 3px solid var(--ink); border-radius: 22px; box-shadow: 0 3px 0 rgba(0,0,0,.2); cursor: pointer;
+  animation: boxIn .25s ease-out both;
+}
+.talk-choices button:hover, .talk-choices button:focus-visible { background: #fff1c2; outline: none; }
+.talk-choices button:hover::before, .talk-choices button:focus-visible::before { content: "▶"; position: absolute; left: 12px; color: #ef8a3c; }
+body.talking .hud-tl, body.talking .hud-tr, body.talking .chatbar, body.talking .ride-btn, body.talking #shopCard,
+body.talking #joystick, body.talking .ride-hud, body.talking #toast { opacity: 0; pointer-events: none !important; transition: opacity .3s; }
+@media (max-width: 640px) {
+  .talk-text { font-size: 15.5px; }
+  .talk-box { padding: 22px 18px 18px; min-height: 100px; }
+  .talk-choices { right: 14px; left: 14px; bottom: calc(9vh + 140px + env(safe-area-inset-bottom, 0px)); }
+}
+
 /* ---------------- 乗り物・ナビ・入室待ち */
 .btn.help { background: #eaffc9; }
 .ride-btn {
@@ -374,6 +440,7 @@ kbd { display: inline-block; border: 2px solid var(--ink); border-bottom-width: 
 }
 @keyframes bob { 50% { transform: translate(-50%, -4px); } }
 .ride-btn:active { transform: translate(-50%, 2px); }
+body:has(#rideBtn:not([hidden])) .talk-btn { bottom: calc(140px + env(safe-area-inset-bottom, 0px)); }
 .ride-hud {
   position: fixed; left: 50%; transform: translateX(-50%); top: calc(12px + env(safe-area-inset-top, 0px));
   z-index: 8; display: flex; gap: 12px; align-items: center; padding: 8px 10px 8px 16px; max-width: calc(100vw - 24px);
@@ -418,6 +485,7 @@ kbd { display: inline-block; border: 2px solid var(--ink); border-bottom-width: 
   #guideFace { width: 56px; height: 56px; }
   .guide p { font-size: 14px; }
   .ride-btn { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); font-size: 14px; }
+  body:has(#rideBtn:not([hidden])) .talk-btn { bottom: calc(202px + env(safe-area-inset-bottom, 0px)); }
   .ride-hud { top: auto; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); width: calc(100vw - 24px); }
   .ride-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -442,6 +510,12 @@ kbd { display: inline-block; border: 2px solid var(--ink); border-bottom-width: 
     <button type="button" data-mode="ranking" aria-pressed="false"><span class="l">投稿ランキング</span><span class="s">ランキング</span></button>
   </div>
   <div class="legend chipline" id="legend"></div>
+  <section class="news panel" id="news" aria-label="新店のお知らせ" hidden>
+    <button type="button" class="news-head" id="newsToggle" aria-expanded="true" aria-controls="newsList">
+      <span>📣 新店のお知らせ</span><b class="news-badge" id="newsBadge" hidden></b><i class="chev" aria-hidden="true">▾</i>
+    </button>
+    <ol class="news-list" id="newsList"></ol>
+  </section>
 </div>
 
 <div class="hud-tr">
@@ -483,6 +557,17 @@ kbd { display: inline-block; border: 2px solid var(--ink); border-bottom-width: 
 
 <div id="shopCard" class="shop-card panel" hidden></div>
 <button id="rideBtn" class="btn ride-btn" type="button" hidden></button>
+<button id="talkBtn" class="btn ride-btn talk-btn" type="button" hidden>💬 話しかける</button>
+
+<div class="talk" id="talk" hidden role="dialog" aria-live="polite" aria-label="会話">
+  <i class="talk-bar top" aria-hidden="true"></i><i class="talk-bar bottom" aria-hidden="true"></i>
+  <div class="talk-choices" id="talkChoices"></div>
+  <div class="talk-box">
+    <span class="talk-name" id="talkName"></span>
+    <p class="talk-text" id="talkText"></p>
+    <span class="talk-next" id="talkNext" aria-hidden="true">▼</span>
+  </div>
+</div>
 <div id="rideHud" class="ride-hud panel" hidden>
   <div class="ride-text"><b id="rideTitle"></b><span id="rideStatus"></span></div>
   <button class="btn sun" id="rideOff" type="button">次で降りる</button>

@@ -34,6 +34,8 @@ def main():
             "id": r["ID"].strip(), "type": "new", "name": r.get("店名", "").strip(),
             "genre": r.get("ジャンル") if r.get("ジャンル") in GENRES else "other",
             "lat": lat, "lng": lng, "opened": opened, "address": r.get("住所", "").strip(),
+            "pref": r.get("都道府県", "").strip(), "city": r.get("市区町村", "").strip(),
+            "found": re.sub(r"[./]", "-", (r.get("見つけた日") or "").strip())[:10],
             "summary": r.get("概要", "").strip(), "background": r.get("背景", "").strip(),
             "sources": [u for u in re.split(r"\s+", r.get("情報源URL", "")) if u.startswith("https://")][:3],
             "facing": 0,

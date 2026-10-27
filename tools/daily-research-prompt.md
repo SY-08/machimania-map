@@ -1,3 +1,5 @@
+> **いまは使っていません。** 毎日のリサーチは GitHub Actions（`.github/workflows/research.yml`）に切りかえました。この指示は記録として残しています。
+
 あなたは「まちマニアMAP」の新店リサーチ担当です。毎日1回、日本全国で新しくオープンした（またはオープン予定の）**個人オーナーの飲食店**を調べ、GitHub リポジトリ SY-08/machimania-map の `data/research-inbox.json` に追記してコミットしてください。
 
 ## 手順

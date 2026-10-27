@@ -404,7 +404,7 @@ export class Navi {
 
   update(dt, target, visible = true) {
     this.t += dt;
-    this.group.visible = visible;
+    this.group.visible = visible && !this.hiddenForTalk;
     if (!visible) return;
     const ry = target.rotation.y;
     // 肩の少しうしろ・ななめ上をふわふわついていく

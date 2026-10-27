@@ -1,0 +1,44 @@
+name: 新店リサーチ（毎日）
+
+# 毎朝 5:43（日本時間）に、全国の個人オーナーの新店を調べて data/research-inbox.json に追加します。
+# GitHub Actions と GitHub Models（AI）の無料枠だけで動きます。手動で動かすときは「Run workflow」。
+on:
+  schedule:
+    - cron: "43 20 * * *"   # UTC 20:43 = 日本時間 5:43
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  models: read
+
+concurrency:
+  group: research
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: シートの「新店」をMAPに反映（SHEET_CSV_URL があるとき）
+        env:
+          SHEET_CSV_URL: ${{ vars.SHEET_CSV_URL }}
+        run: python3 tools/research_actions.py publish
+      - name: 全国の新店を調べる
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/research_actions.py research
+      - name: 変更をコミット
+        run: |
+          git config user.name "machimania-research[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/research-inbox.json data/research.json
+          if git diff --cached --quiet; then echo "変更なし"; exit 0; fi
+          n=$(python3 -c "import json,datetime;d=json.load(open('data/research-inbox.json'));t=datetime.datetime.utcnow()+datetime.timedelta(hours=9);print(sum(1 for i in d['items'] if i.get('found')==t.strftime('%Y-%m-%d')))")
+          git commit -m "新店リサーチ $(TZ=Asia/Tokyo date +%F)（${n}件）"
+          git pull --rebase
+          git push
