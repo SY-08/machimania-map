@@ -15,6 +15,7 @@
  *       GITHUB_TOKEN         GitHub の「Fine-grained token」（このリポジトリの Contents: Read and write）
  *       SUPABASE_URL         例: https://xxxx.supabase.co
  *       SUPABASE_SERVICE_KEY Supabase の Secret key（sb_secret_…。ぜったいに公開しない）
+ *       MEMBER_SHEET_ID      参加者の情報（投稿・アカウント・通報）を置く、別の非公開スプレッドシートのID
  *   - 関数「setup」を1回実行（シートと、毎日・毎時の自動実行が作られます）
  */
 
@@ -24,14 +25,17 @@ const SHEETS = {
     headers: ["ID", "店名", "ジャンル", "都道府県", "市区町村", "住所", "緯度", "経度", "開店日", "状態", "概要", "背景", "情報源URL", "見つけた日", "表示", "メモ", "個人店の根拠"],
   },
   posts: {
+    member: true,   // 会員情報のスプレッドシート（非公開）に置く
     name: "投稿",
     headers: ["投稿ID", "投稿日時", "ニックネーム", "ユーザーID", "店名", "ジャンル", "緯度", "経度", "SNSリンク", "口コミ", "状態", "メモ"],
   },
   accounts: {
+    member: true,
     name: "アカウント",
     headers: ["ユーザーID", "ニックネーム", "投稿数", "登録日時", "最終ログイン", "公式★", "利用停止", "メモ"],
   },
   reports: {
+    member: true,
     name: "通報",
     headers: ["通報ID", "日時", "通報した人", "対象の人", "対象の投稿", "理由"],
   },
@@ -44,25 +48,47 @@ const SHEETS = {
 const GENRES = ["ramen", "udon", "cafe", "sweets", "izakaya", "bakery", "curry", "sushi", "yakiniku", "chinese", "western", "other"];
 
 // ===================================================================== 設定
+// 参加者の情報（投稿・アカウント・通報）は、別の非公開スプレッドシート（スクリプト プロパティ MEMBER_SHEET_ID）に置く
+function memberSs_() {
+  const id = props_().MEMBER_SHEET_ID;
+  return id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActive();
+}
+function ssFor_(def) { return def.member ? memberSs_() : SpreadsheetApp.getActive(); }
+
 function setup() {
   const ss = SpreadsheetApp.getActive();
+  const ms = memberSs_();
   for (const key of Object.keys(SHEETS)) {
     const def = SHEETS[key];
-    let sh = ss.getSheetByName(def.name);
-    if (!sh) sh = ss.insertSheet(def.name);
+    const book = ssFor_(def);
+    let sh = book.getSheetByName(def.name);
+    if (!sh) sh = book.insertSheet(def.name);
     const first = sh.getRange(1, 1, 1, def.headers.length);
     first.setValues([def.headers]).setFontWeight("bold").setBackground("#f4efe2");
     sh.setFrozenRows(1);
+    // 会員情報を別のスプレッドシートへ移す：元のシートに残っている行を写してから、元のシートを消す
+    if (def.member && ms.getId() !== ss.getId()) {
+      const old = ss.getSheetByName(def.name);
+      if (old) {
+        if (old.getLastRow() > 1) {
+          const rows = old.getRange(2, 1, old.getLastRow() - 1, def.headers.length).getValues();
+          sh.getRange(sh.getLastRow() + 1, 1, rows.length, def.headers.length).setValues(rows);
+        }
+        ss.deleteSheet(old);
+      }
+    }
   }
-  ss.setActiveSheet(ss.getSheetByName(SHEETS.shops.name)); ss.moveActiveSheet(1);   // 「新店」を先頭に（毎朝のリサーチが先頭シートを読む）
-  const old = ss.getSheetByName("シート1");
-  if (old && old.getLastRow() <= 1 && ss.getSheets().length > 1) ss.deleteSheet(old);
+  ss.setActiveSheet(ss.getSheetByName(SHEETS.shops.name)); ss.moveActiveSheet(1);   // 「新店」を先頭に
+  for (const book of [ss, ms]) {
+    const blank = book.getSheetByName("シート1") || book.getSheetByName("Sheet1");
+    if (blank && blank.getLastRow() <= 1 && book.getSheets().length > 1) book.deleteSheet(blank);
+  }
   // チェックボックス
   checkboxes_(SHEETS.shops, "表示");
   checkboxes_(SHEETS.accounts, "公式★");
   checkboxes_(SHEETS.accounts, "利用停止");
   // 状態のプルダウン（投稿）
-  const posts = ss.getSheetByName(SHEETS.posts.name);
+  const posts = sheet_(SHEETS.posts);
   const stCol = SHEETS.posts.headers.indexOf("状態") + 1;
   posts.getRange(2, stCol, posts.getMaxRows() - 1, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireValueInList(["公開", "非表示"], true).build());
@@ -71,7 +97,7 @@ function setup() {
   ScriptApp.newTrigger("dailyShops").timeBased().everyDays(1).atHour(7).inTimezone("Asia/Tokyo").create();
   ScriptApp.newTrigger("syncSupabase").timeBased().everyHours(1).create();
   writeRules();
-  log_("setup", "シートと自動実行を作りました");
+  log_("setup", "シートと自動実行を作りました" + (ms.getId() !== ss.getId() ? "（会員情報は別のスプレッドシート）" : ""));
   try { SpreadsheetApp.getUi().alert("準備ができました。毎朝7時台に新店、1時間ごとに投稿とアカウントが更新されます。"); } catch (e) { /* エディタから実行したとき */ }
 }
 
@@ -399,7 +425,7 @@ function githubPutFile_(path, text, message) {
   return true;
 }
 
-function sheet_(def) { return SpreadsheetApp.getActive().getSheetByName(def.name); }
+function sheet_(def) { return ssFor_(def).getSheetByName(def.name); }
 
 function readRows_(sh, def) {
   const last = sh.getLastRow();
