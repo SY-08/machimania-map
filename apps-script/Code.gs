@@ -40,6 +40,7 @@ const SHEETS = {
     headers: ["通報ID", "日時", "通報した人", "対象の人", "対象の投稿", "理由"],
   },
   log: {
+    member: true,
     name: "ログ",
     headers: ["日時", "処理", "結果"],
   },
@@ -145,9 +146,11 @@ const RULES = [
 ];
 
 function writeRules() {
-  const ss = SpreadsheetApp.getActive();
+  const ss = memberSs_();   // ルールも、公開する「新店」とは別のスプレッドシートに置く
   let sh = ss.getSheetByName("ルール");
   if (!sh) sh = ss.insertSheet("ルール");
+  const main = SpreadsheetApp.getActive();
+  if (main.getId() !== ss.getId() && main.getSheetByName("ルール")) main.deleteSheet(main.getSheetByName("ルール"));
   sh.clear();
   sh.getRange(1, 1, RULES.length, 2).setValues(RULES).setWrap(true).setVerticalAlignment("top");
   sh.getRange(1, 1, 1, 2).setFontWeight("bold").setBackground("#f4efe2");
