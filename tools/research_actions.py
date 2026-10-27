@@ -156,50 +156,53 @@ SYSTEM = f"""あなたは日本の飲食店ニュースを調べる編集者で�
 LAST_AI_ERROR = {"msg": ""}
 
 
+ENDPOINTS = [
+    ("https://models.github.ai/inference/chat/completions", None),
+    ("https://models.inference.ai.azure.com/chat/completions", "gpt-4o-mini"),   # 予備（古い入口）
+]
+
+
 def ask_ai(title, url, text):
     token = os.environ.get("GITHUB_TOKEN")
-    body = {
-        "model": MODEL,
-        "temperature": 0,
-        "response_format": {"type": "json_object"},
-        "messages": [
-            {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": f"記事のタイトル：{title}\nURL：{url}\n本文：\n{text[:7000]}"},
-        ],
-    }
-    req = urllib.request.Request(
-        "https://models.github.ai/inference/chat/completions",
-        data=json.dumps(body).encode("utf-8"),
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Accept": "application/json"},
-    )
-    for attempt in range(3):
-        try:
-            with urllib.request.urlopen(req, timeout=60) as r:
-                raw = r.read().decode("utf-8", "replace")
+    messages = [
+        {"role": "system", "content": SYSTEM},
+        {"role": "user", "content": f"記事のタイトル：{title}\nURL：{url}\n本文：\n{text[:7000]}"},
+    ]
+    for ep, alt_model in ENDPOINTS:
+        body = {"model": alt_model or MODEL, "temperature": 0, "response_format": {"type": "json_object"}, "messages": messages}
+        req = urllib.request.Request(
+            ep, data=json.dumps(body).encode("utf-8"), method="POST",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json",
+                     "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": UA},
+        )
+        for attempt in range(3):
             try:
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    raw = r.read().decode("utf-8", "replace")
                 res = json.loads(raw)
                 content = res["choices"][0]["message"].get("content") or ""
-            except Exception:
-                LAST_AI_ERROR["msg"] = "応答が読めない: " + raw[:150]
-                return None
-            m = re.search(r"\{.*\}", content, re.S)   # ```json … ``` で囲まれていても取り出す
-            if not m:
-                LAST_AI_ERROR["msg"] = "JSONがない: " + content[:150]
-                return None
-            return json.loads(m.group(0))
-        except urllib.error.HTTPError as e:
-            msg = e.read().decode("utf-8", "replace")[:300]
-            if e.code == 429:
-                log(f"  AIの回数制限：待って再試行（{msg}）")
-                time.sleep(20 * (attempt + 1))
-                continue
-            log(f"  AIエラー {e.code}: {msg}")
-            LAST_AI_ERROR["msg"] = f"{e.code}: {msg}"
-            return None
-        except Exception as e:
-            log(f"  AIエラー: {e}")
-            LAST_AI_ERROR["msg"] = str(e)
-            time.sleep(5)
+                m = re.search(r"\{.*\}", content, re.S)   # ```json … ``` で囲まれていても取り出す
+                if not m:
+                    LAST_AI_ERROR["msg"] = "JSONがない: " + content[:150]
+                    return None
+                return json.loads(m.group(0))
+            except urllib.error.HTTPError as e:
+                msg = e.read().decode("utf-8", "replace")[:300]
+                if e.code == 429:
+                    log(f"  AIの回数制限：待って再試行（{msg}）")
+                    time.sleep(20 * (attempt + 1))
+                    continue
+                LAST_AI_ERROR["msg"] = f"{ep.split('/')[2]} {e.code}: {msg}"
+                log("  AIエラー " + LAST_AI_ERROR["msg"])
+                break   # 次の入口を試す
+            except (ValueError, KeyError) as e:
+                LAST_AI_ERROR["msg"] = f"{ep.split('/')[2]} 応答が読めない: " + (locals().get("raw") or "")[:120]
+                log("  " + LAST_AI_ERROR["msg"])
+                break
+            except Exception as e:
+                LAST_AI_ERROR["msg"] = f"{ep.split('/')[2]} {e}"
+                log("  AIエラー " + LAST_AI_ERROR["msg"])
+                time.sleep(5)
     return None
 
 
