@@ -153,6 +153,9 @@ SYSTEM = f"""あなたは日本の飲食店ニュースを調べる編集者で�
 記事に複数の店があるときは、条件にいちばん合う1店だけを返してください。"""
 
 
+LAST_AI_ERROR = {"msg": ""}
+
+
 def ask_ai(title, url, text):
     token = os.environ.get("GITHUB_TOKEN")
     body = {
@@ -181,17 +184,21 @@ def ask_ai(title, url, text):
                 time.sleep(20 * (attempt + 1))
                 continue
             log(f"  AIエラー {e.code}: {msg}")
+            LAST_AI_ERROR["msg"] = f"{e.code}: {msg}"
             return None
         except Exception as e:
             log(f"  AIエラー: {e}")
+            LAST_AI_ERROR["msg"] = str(e)
             time.sleep(5)
     return None
 
 
 def valid(r, text):
     """AIの答えを、機械的にもう一度確かめる"""
-    if not r or not r.get("ok"):
-        return False, (r or {}).get("reason", "AIが対象外と判断")
+    if r is None:
+        return False, "AIを呼び出せなかった（" + LAST_AI_ERROR["msg"][:120] + "）"
+    if not r.get("ok"):
+        return False, "AI判定：" + (str(r.get("reason") or "").strip() or "対象外")
     for k in ("name", "address", "owner"):
         if not str(r.get(k, "")).strip():
             return False, f"{k} がない"
@@ -276,9 +283,10 @@ def research():
         log(f"  ＋ {item['name']}（{item['pref']}{item['city']}）")
         time.sleep(4)   # 無料枠の回数制限（1分あたり）に収める
 
-    inbox["items"] = (inbox["items"] + added)[-300:]
-    inbox["updated"] = dt.datetime.now(JST).isoformat(timespec="seconds")
-    INBOX.write_text(json.dumps(inbox, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if added:   # 追加がない日はファイルを書きかえない（空のコミットを作らない）
+        inbox["items"] = (inbox["items"] + added)[-300:]
+        inbox["updated"] = dt.datetime.now(JST).isoformat(timespec="seconds")
+        INBOX.write_text(json.dumps(inbox, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     log(f"\n追加 {len(added)} 件 ／ AIで確認 {used} 件")
     for t, why in rejected[:40]:
         log(f"  × {t[:50]} … {why}")
