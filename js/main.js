@@ -1217,9 +1217,45 @@ async function boot() {
     const online = net.mode === "online";
     const m = openModal(postFormHTML({ here, online, nickname: profile.name, guide: REVIEW_GUIDE }));
     const f = $("#postForm", m.el);
+    // 建てる場所：線路・駅・道路・川・ほかのお店にかぶるところには建てられない
+    const readWhere = () => {
+      if (f.querySelector("input[name=pWhere]:checked").value !== "coords") return { lat, lng };
+      const mm = $("#pCoords", m.el).value.match(/(-?\d+(?:\.\d+)?)\s*[,，\s]\s*(-?\d+(?:\.\d+)?)/);
+      if (!mm) return null;
+      let a = +mm[1], b = +mm[2];
+      if (a > 90) [a, b] = [b, a];
+      return { lat: a, lng: b };
+    };
+    let siteFix = null;
+    const checkSite = async () => {
+      const box = $("#pSite", m.el), fixBtn = $("#pSiteFix", m.el);
+      const w = readWhere();
+      siteFix = null;
+      if (!w) { box.hidden = true; return null; }
+      const [x, z] = proj.xz(w.lat, w.lng);
+      await W.ensureAround(x, z, 60);
+      const why = W.siteIssue(x, z);
+      box.hidden = !why;
+      if (!why) return null;
+      const p = W.findSite(x, z, 40);
+      if (p) siteFix = proj.latlng(p[0], p[1]);
+      $("#pSiteText", m.el).textContent = `この場所には建てられません（${why}）。` + (siteFix ? "" : "少しはなれた場所で投稿してください。");
+      fixBtn.hidden = !siteFix;
+      return why;
+    };
+    $("#pSiteFix", m.el).addEventListener("click", () => {
+      if (!siteFix) return;
+      f.querySelector("input[name=pWhere][value=coords]").checked = true;
+      $("#pCoords", m.el).hidden = false;
+      $("#pCoords", m.el).value = `${siteFix[0].toFixed(6)}, ${siteFix[1].toFixed(6)}`;
+      checkSite();
+    });
+    $("#pCoords", m.el).addEventListener("change", checkSite);
     f.querySelectorAll("input[name=pWhere]").forEach((r) => r.addEventListener("change", () => {
       $("#pCoords", m.el).hidden = f.querySelector("input[name=pWhere]:checked").value !== "coords";
+      checkSite();
     }));
+    checkSite();
     const showReview = () => {
       const v = $("#pComment", m.el).value, box = $("#pReviewCheck", m.el);
       $("#pCount", m.el).textContent = `${[...v].length} / 200`;
@@ -1262,6 +1298,8 @@ async function boot() {
       const [x, z] = proj.xz(plat, plng);
       await W.ensureAround(x, z);
       if (!W.isLand(x, z)) return toast("その場所は日本の陸地ではないようです");
+      const why = await checkSite();
+      if (why) return toast(`この場所には建てられません（${why}）。「近くの空き地にずらす」を押すか、場所を変えてください`, 5500);
       const btn = $("#pSend", m.el);
       btn.disabled = true;
       btn.textContent = "送信中…";

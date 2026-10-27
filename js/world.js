@@ -65,6 +65,8 @@ function vnoise(x, z) {
 }
 const fbm = (x, z) => vnoise(x, z) * 0.6 + vnoise(x * 2.3 + 5, z * 2.3 + 9) * 0.3 + vnoise(x * 5.1 + 17, z * 5.1 + 3) * 0.1;
 
+const SHOP_GAP = 7.5;   // お店どうしの間（中心から中心）
+
 // ======================================================================
 export class World {
   constructor(scene, { index, proj, base, shops = [] }) {
@@ -511,11 +513,61 @@ export class World {
     this._placeShops();
   }
 
+  // その場所にお店を建てられるか。だめなら理由を返す（線路・駅・道路・川・ほかのお店にかぶる）
+  siteIssue(x, z, ignoreId = null) {
+    const t = this.tileAt(x, z);
+    if (!t) return "まだ地図を読みこんでいる場所です";
+    if (!t.inLand(x, z)) return "海や湖の上です";
+    for (const o of this.shopObjs) {
+      if (o.shop.id === ignoreId) continue;
+      if ((x - o.x) ** 2 + (z - o.z) ** 2 < SHOP_GAP * SHOP_GAP) return `「${o.shop.name}」にかぶっています`;
+    }
+    for (const st of this.stations) {
+      if ((x - st.plaza[0]) ** 2 + (z - st.plaza[1]) ** 2 < 10 * 10) return `${st.name}駅の駅前広場にかぶっています`;
+      for (const sp of st.spots) if ((x - sp.x) ** 2 + (z - sp.z) ** 2 < 7.5 * 7.5) return `${st.name}駅のホームにかぶっています`;
+    }
+    let why = null;
+    const need = { rail: 5.0, major: 5.0, minor: 4.6, river: 4.5, plaza: 10 };
+    const label = { rail: "線路", major: "大きな道路", minor: "道路", river: "川", plaza: "駅前広場" };
+    // タイルのさかい目の近くでは、となりのタイルの線路や道路も見る
+    const near = new Set([t]);
+    for (const [dx, dz] of [[-11, 0], [11, 0], [0, -11], [0, 11]]) { const u = this.tileAt(x + dx, z + dz); if (u) near.add(u); }
+    for (const u of near) {
+      u.segs.near(x, z, 11, (it) => {
+        const n = need[it.tag];
+        if (!n) return;
+        if (segDist(x, z, it.a[0], it.a[1], it.b[0], it.b[1]).d < n) { why = `${label[it.tag]}にかぶっています`; return false; }
+      });
+      if (why) break;
+    }
+    return why;
+  }
+
+  // いちばん近い「建てられる場所」をさがす（見つからなければ null）
+  findSite(x, z, maxR = 40, ignoreId = null) {
+    if (!this.siteIssue(x, z, ignoreId)) return [x, z];
+    for (let r = 1.5; r <= maxR; r += 1.5) {
+      const n = Math.max(8, Math.round((Math.PI * 2 * r) / 1.5));
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const nx = x + Math.cos(a) * r, nz = z + Math.sin(a) * r;
+        if (!this.siteIssue(nx, nz, ignoreId)) return [nx, nz];
+      }
+    }
+    return null;
+  }
+
   _placeShops() {
     const have = new Set(this.shopObjs.map((o) => o.shop.id));
     for (const shop of this._shops) {
       if (have.has(shop.id) || shop.lat == null || shop.lng == null) continue;
-      const [x, z] = this.proj.xz(shop.lat, shop.lng);
+      let [x, z] = this.proj.xz(shop.lat, shop.lng);
+      // 地図が読みこまれてから建てる（線路やほかのお店をよけるため）
+      if (this.tileSet.has(this.tileKeyAt(x, z)) && !this.tiles.has(this.tileKeyAt(x, z))) continue;
+      if (this.tiles.has(this.tileKeyAt(x, z))) {
+        const p = this.findSite(x, z, 40, shop.id);
+        if (p) [x, z] = p;
+      }
       const kind = shopKind(shop);
       const look = shopLook(shop, kind);
       const g = new THREE.Group();

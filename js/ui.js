@@ -308,6 +308,7 @@ export function postFormHTML({ here, online, nickname, guide }) {
         <label class="radio"><input type="radio" name="pWhere" value="here" checked> いま立っている場所（${esc(here)}）</label>
         <label class="radio"><input type="radio" name="pWhere" value="coords"> 緯度・経度を入れる</label>
         <input type="text" id="pCoords" placeholder="35.54132, 139.44836（Googleマップで右クリック）" hidden>
+        <div id="pSite" class="site-check" hidden><span id="pSiteText"></span> <button type="button" id="pSiteFix" class="mini" hidden>近くの空き地にずらす</button></div>
       </fieldset>
       <label class="field"><b>口コミ（必須・10文字以上）</b><textarea id="pComment" maxlength="200" required placeholder="食べたもの・味・量・値段・接客・お店の雰囲気・混み具合など、行ってわかったことを書いてください"></textarea>
         <small id="pCommentNote">${esc(guide || "")}</small>
