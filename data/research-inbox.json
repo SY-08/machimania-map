@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-27T14:08:10+09:00",
+  "updated": "2026-10-27T14:32:41+09:00",
   "items": [
     {
       "id": "r-20261022-3",
@@ -116,6 +116,40 @@
         "https://www.instagram.com/sen.no.hiro/"
       ],
       "found": "2026-10-26"
+    },
+    {
+      "id": "r-20261027-1",
+      "name": "LA Grace（ラ グラース）",
+      "genre": "cafe",
+      "pref": "大阪府",
+      "city": "和泉市",
+      "address": "大阪府和泉市黒鳥町1455",
+      "opened": "2026-10-23",
+      "summary": "【和泉市】門真市で愛された人気店が10月23日、黒鳥町へ移転オープン！体に優しい薬膳カフェが誕生 | 号外NET 和泉市",
+      "background": "",
+      "owner": "テーブル席のほか、店主さんとお話ししながら食事を楽しめるカウンター席もあり、落ち着いた雰囲気です",
+      "sources": [
+        "https://izumi.goguynet.jp/2026/10/25/yakuzen-de-cafe-an-an/"
+      ],
+      "found": "2026-10-27",
+      "review": true
+    },
+    {
+      "id": "r-20261027-2",
+      "name": "atlas（アトラス）",
+      "genre": "bakery",
+      "pref": "東京都",
+      "city": "品川区",
+      "address": "東京都品川区小山4-1-4",
+      "opened": "2026-09-09",
+      "summary": "武蔵小山に「atlas（アトラス）」が開業。「ラ・トリプレッタ」創業メンバーが独立。昼は弁当、夜はワイン立ち飲み。イタリ",
+      "background": "",
+      "owner": "「ラ・トリプレッタ」創業メンバーが独立",
+      "sources": [
+        "https://food-stadium.com/headline/40028/"
+      ],
+      "found": "2026-10-27",
+      "review": true
     }
   ],
   "excluded": [
