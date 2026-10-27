@@ -288,6 +288,10 @@ def research():
             f.write(f"## 新店リサーチ {TODAY}\n\n追加 **{len(added)}** 件（AIで確認 {used} 件）\n\n")
             for a in added:
                 f.write(f"- {a['name']}（{a['pref']}{a['city']}）{a['opened']} … {a['owner']}\n")
+            f.write(f"\n<details><summary>見送った記事（{len(rejected)}件）</summary>\n\n")
+            for t, why in rejected[:80]:
+                f.write(f"- {t[:60]} … {why}\n")
+            f.write("\n</details>\n")
     return len(added)
 
 
