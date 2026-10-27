@@ -10,7 +10,7 @@ def load(path):
     raw = pathlib.Path(path).read_bytes().strip()
     try:
         text = raw.decode("utf-8")
-        if "ID," not in text[:20]:
+        if "ID," not in text[:20] and '"ID"' not in text[:20]:
             text = base64.b64decode(raw).decode("utf-8")
     except Exception:
         text = base64.b64decode(raw).decode("utf-8")

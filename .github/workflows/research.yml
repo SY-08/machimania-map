@@ -24,9 +24,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: シートの「新店」をMAPに反映（SHEET_CSV_URL があるとき）
+      - name: シートの「新店」をMAPに反映
         env:
-          SHEET_CSV_URL: ${{ vars.SHEET_CSV_URL }}
+          # 管理シート「まちマニアMAP」の「新店」（リンクを知っている全員が閲覧可。中身はMAPで公開している新店だけ）
+          SHEET_CSV_URL: ${{ vars.SHEET_CSV_URL || 'https://docs.google.com/spreadsheets/d/1SltyevYjWm98al4RaIY9CiMlFgrmdr2hZUu-dZQmguQ/gviz/tq?tqx=out:csv&gid=1492085226' }}
         run: python3 tools/research_actions.py publish
       - name: 全国の新店を調べる
         env:
