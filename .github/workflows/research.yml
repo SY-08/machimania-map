@@ -1,7 +1,8 @@
 name: 新店リサーチ（毎日）
 
 # 毎朝 5:43（日本時間）に、全国の個人オーナーの新店を調べて data/research-inbox.json に追加します。
-# GitHub Actions と GitHub Models（AI）の無料枠だけで動きます。手動で動かすときは「Run workflow」。
+# GitHub Actions の無料枠で動きます。Secrets に GEMINI_API_KEY（Google AI Studio の無料の鍵）を入れると AI が判定します。
+# 手動で動かすときは「Run workflow」。
 on:
   schedule:
     - cron: "43 20 * * *"   # UTC 20:43 = 日本時間 5:43
@@ -9,7 +10,6 @@ on:
 
 permissions:
   contents: write
-  models: read
 
 concurrency:
   group: research
@@ -30,7 +30,8 @@ jobs:
         run: python3 tools/research_actions.py publish
       - name: 全国の新店を調べる
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
         run: python3 tools/research_actions.py research
       - name: 変更をコミット
         run: |

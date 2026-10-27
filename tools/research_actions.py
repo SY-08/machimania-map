@@ -3,15 +3,16 @@
 まちマニアMAP 新店リサーチ（GitHub Actions で毎日動かす。費用はかからない）
 
   1. ニュースのRSS（Bing ニュース・Google ニュース）から「新店・開店・独立」の記事を集める
-  2. 記事の本文を読み、GitHub Models（GitHub の無料のAI）で
-     「個人オーナーの飲食店か」「店名・住所・開店日」をスクリーニングして取り出す
+  2. 記事の本文を読み、「個人オーナーの飲食店か」「店名・住所・開店日」をスクリーニングして取り出す
+     - GEMINI_API_KEY（Google の無料のAI）があれば AI が判定（おすすめ）
+     - なければ言葉のきまりで取り出し、シートでは「表示」を外した状態で取りこむ（人が確かめてからMAPへ）
   3. 条件を満たした店だけを data/research-inbox.json に追記する
      （スプレッドシートの Apps Script が毎朝7時台に「新店」シートへ取りこむ）
 
   さらに、環境変数 SHEET_CSV_URL（「新店」シートをCSVで公開したURL）があれば、
   そのCSVから data/research.json（MAPに出す新店）を作りなおす。
 
-必要なもの（Actions が自動で用意）：GITHUB_TOKEN（models: read 権限）
+必要なもの：GITHUB_TOKEN（Actions が自動で用意）、GEMINI_API_KEY（任意・リポジトリの Secrets）
 """
 import datetime as dt
 import html
@@ -30,7 +31,7 @@ INBOX = ROOT / "data" / "research-inbox.json"
 RESEARCH = ROOT / "data" / "research.json"
 JST = dt.timezone(dt.timedelta(hours=9))
 TODAY = dt.datetime.now(JST).date()
-MODEL = os.environ.get("RESEARCH_MODEL", "openai/gpt-4.1-mini")
+USE_AI = bool(os.environ.get("GEMINI_API_KEY", "").strip())
 MAX_ARTICLES = int(os.environ.get("RESEARCH_MAX_ARTICLES", "28"))   # AIに読ませる記事の上限（無料枠に収める）
 UA = "Mozilla/5.0 (compatible; machimania-map-research/1.0; +https://sy-08.github.io/machimania-map/)"
 GENRES = ["ramen", "udon", "cafe", "sweets", "izakaya", "bakery", "curry", "sushi", "yakiniku", "chinese", "western", "other"]
@@ -156,54 +157,87 @@ SYSTEM = f"""あなたは日本の飲食店ニュースを調べる編集者で�
 LAST_AI_ERROR = {"msg": ""}
 
 
-ENDPOINTS = [
-    ("https://models.github.ai/inference/chat/completions", None),
-    ("https://models.inference.ai.azure.com/chat/completions", "gpt-4o-mini"),   # 予備（古い入口）
-]
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "").strip() or "gemini-2.5-flash"
 
 
 def ask_ai(title, url, text):
-    token = os.environ.get("GITHUB_TOKEN")
-    messages = [
-        {"role": "system", "content": SYSTEM},
-        {"role": "user", "content": f"記事のタイトル：{title}\nURL：{url}\n本文：\n{text[:7000]}"},
-    ]
-    for ep, alt_model in ENDPOINTS:
-        body = {"model": alt_model or MODEL, "temperature": 0, "response_format": {"type": "json_object"}, "messages": messages}
-        req = urllib.request.Request(
-            ep, data=json.dumps(body).encode("utf-8"), method="POST",
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json",
-                     "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": UA},
-        )
-        for attempt in range(3):
-            try:
-                with urllib.request.urlopen(req, timeout=60) as r:
-                    raw = r.read().decode("utf-8", "replace")
-                res = json.loads(raw)
-                content = res["choices"][0]["message"].get("content") or ""
-                m = re.search(r"\{.*\}", content, re.S)   # ```json … ``` で囲まれていても取り出す
-                if not m:
-                    LAST_AI_ERROR["msg"] = "JSONがない: " + content[:150]
-                    return None
-                return json.loads(m.group(0))
-            except urllib.error.HTTPError as e:
-                msg = e.read().decode("utf-8", "replace")[:300]
-                if e.code == 429:
-                    log(f"  AIの回数制限：待って再試行（{msg}）")
-                    time.sleep(20 * (attempt + 1))
-                    continue
-                LAST_AI_ERROR["msg"] = f"{ep.split('/')[2]} {e.code}: {msg}"
-                log("  AIエラー " + LAST_AI_ERROR["msg"])
-                break   # 次の入口を試す
-            except (ValueError, KeyError) as e:
-                LAST_AI_ERROR["msg"] = f"{ep.split('/')[2]} 応答が読めない: " + (locals().get("raw") or "")[:120]
-                log("  " + LAST_AI_ERROR["msg"])
-                break
-            except Exception as e:
-                LAST_AI_ERROR["msg"] = f"{ep.split('/')[2]} {e}"
-                log("  AIエラー " + LAST_AI_ERROR["msg"])
-                time.sleep(5)
+    """Google Gemini（無料枠）で判定する。GEMINI_API_KEY がなければ None"""
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not key:
+        return None
+    body = {
+        "systemInstruction": {"parts": [{"text": SYSTEM}]},
+        "contents": [{"role": "user", "parts": [{"text": f"記事のタイトル：{title}\nURL：{url}\n本文：\n{text[:7000]}"}]}],
+        "generationConfig": {"temperature": 0, "responseMimeType": "application/json"},
+    }
+    req = urllib.request.Request(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
+        data=json.dumps(body).encode("utf-8"), method="POST",
+        headers={"Content-Type": "application/json", "x-goog-api-key": key, "User-Agent": UA},
+    )
+    for attempt in range(3):
+        raw = ""
+        try:
+            with urllib.request.urlopen(req, timeout=90) as r:
+                raw = r.read().decode("utf-8", "replace")
+            res = json.loads(raw)
+            content = "".join(p.get("text", "") for p in res["candidates"][0]["content"]["parts"])
+            m = re.search(r"\{.*\}", content, re.S)
+            if not m:
+                LAST_AI_ERROR["msg"] = "JSONがない: " + content[:150]
+                return None
+            return json.loads(m.group(0))
+        except urllib.error.HTTPError as e:
+            msg = e.read().decode("utf-8", "replace")[:300]
+            if e.code in (429, 503):
+                log(f"  AIの回数制限：待って再試行（{e.code}）")
+                time.sleep(30 * (attempt + 1))
+                continue
+            LAST_AI_ERROR["msg"] = f"{e.code}: {msg}"
+            log("  AIエラー " + LAST_AI_ERROR["msg"])
+            return None
+        except Exception as e:
+            LAST_AI_ERROR["msg"] = f"{e} {raw[:120]}"
+            log("  AIエラー " + LAST_AI_ERROR["msg"])
+            time.sleep(5)
     return None
+
+
+# ---------------------------------------------------------------- AIなしのときの読み取り（言葉のきまりで取り出す）
+GENRE_WORDS = [("ramen", "ラーメン|らーめん|拉麺|中華そば|つけ麺"), ("udon", "うどん|そば|蕎麦"), ("cafe", "カフェ|喫茶|珈琲|コーヒー"),
+               ("sweets", "スイーツ|ケーキ|菓子|ジェラート|アイス|ドーナツ|パフェ|クレープ"), ("bakery", "パン|ベーカリー|ブーランジェリー"),
+               ("izakaya", "居酒屋|酒場|バル|ビール|日本酒|立ち飲み"), ("curry", "カレー"), ("sushi", "寿司|鮨|すし"),
+               ("yakiniku", "焼肉|ホルモン|焼き鳥|焼鳥"), ("chinese", "中華料理|餃子|麻婆"), ("western", "イタリアン|フレンチ|ビストロ|洋食|ピザ|パスタ|ハンバーグ")]
+PREF_RE = "(" + "|".join(PREFS) + ")"
+
+
+def rule_extract(title, text):
+    blob = title + "。" + text
+    m = re.search(r"[「『]([^」』]{2,30})[」』]", title) or re.search(r"[「『]([^」』]{2,30})[」』]\s*(?:が|を|は)?[^。]{0,20}(?:オープン|開店|開業)", text)
+    name = m.group(1).strip() if m else ""
+    am = re.search(PREF_RE + r"([^\s、。（）()]{1,8}?[市区町村郡])([^\s、。（）()「」]{1,24}?\d+(?:[-－‐ー丁目番地号の]\d*){0,4})", text)
+    address = "".join(am.groups()) if am else ""
+    om = re.search(r"(?:(\d{4})年)?\s*(\d{1,2})月\s*(\d{1,2})日[^。]{0,25}(?:オープン|開店|開業|グランドオープン)", blob) or \
+         re.search(r"(?:オープン|開店|開業)[^。]{0,15}?(?:(\d{4})年)?\s*(\d{1,2})月\s*(\d{1,2})日", blob)
+    opened = ""
+    if om:
+        y = int(om.group(1)) if om.group(1) else TODAY.year
+        try:
+            d = dt.date(y, int(om.group(2)), int(om.group(3)))
+            if not om.group(1) and (d - TODAY).days > 200:
+                d = d.replace(year=y - 1)
+            opened = d.isoformat()
+        except ValueError:
+            pass
+    ow = re.search(r"[^。]{0,40}(店主|オーナー|夫婦|独立|脱サラ|修業|一人で|ひとりで|個人で)[^。]{0,40}", text)
+    owner = ow.group(0).strip() if ow else ""
+    genre = next((g for g, w in GENRE_WORDS if re.search(w, blob)), "other")
+    if not (name and address and opened and owner):
+        return {"ok": False, "reason": "店名・住所（番地）・開店日・店主の記述のどれかが本文から読み取れない"}
+    if CHAIN_WORDS.search(title + " " + owner):
+        return {"ok": False, "reason": "チェーン・企業の可能性"}
+    return {"ok": True, "name": name, "address": address, "pref": am.group(1), "city": am.group(2), "opened": opened, "genre": genre,
+            "summary": re.sub(r"\s+", " ", title)[:60], "background": "", "owner": owner, "review": True}
 
 
 def valid(r, text):
@@ -269,7 +303,7 @@ def research():
             rejected.append((it["title"], "本文が短い"))
             continue
         used += 1
-        r = ask_ai(title or it["title"], url, text)
+        r = ask_ai(title or it["title"], url, text) if USE_AI else rule_extract(title or it["title"], text)
         ok, why = valid(r, text)
         if not ok:
             rejected.append((it["title"], why))
@@ -291,10 +325,12 @@ def research():
             "sources": [url],
             "found": TODAY.isoformat(),
         }
+        if r.get("review") or not USE_AI:
+            item["review"] = True   # AIなしで読み取った店は、シートで「表示」を外した状態で取りこむ（人が確かめてからMAPへ）
         seq += 1
         added.append(item)
         log(f"  ＋ {item['name']}（{item['pref']}{item['city']}）")
-        time.sleep(4)   # 無料枠の回数制限（1分あたり）に収める
+        time.sleep(7 if USE_AI else 1)   # 無料枠の回数制限（1分あたり）に収める
 
     if added:   # 追加がない日はファイルを書きかえない（空のコミットを作らない）
         inbox["items"] = (inbox["items"] + added)[-300:]
@@ -306,7 +342,7 @@ def research():
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as f:
-            f.write(f"## 新店リサーチ {TODAY}\n\n追加 **{len(added)}** 件（AIで確認 {used} 件）\n\n")
+            f.write(f"## 新店リサーチ {TODAY}\n\n追加 **{len(added)}** 件（{'AI（Gemini）' if USE_AI else '言葉のきまり（AIなし）'}で確認 {used} 件）\n\n")
             for a in added:
                 f.write(f"- {a['name']}（{a['pref']}{a['city']}）{a['opened']} … {a['owner']}\n")
             f.write(f"\n<details><summary>見送った記事（{len(rejected)}件）</summary>\n\n")

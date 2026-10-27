@@ -144,15 +144,18 @@
 
 ### 毎日の新店リサーチ（GitHub Actions・無料）
 
-毎朝 5:43 に GitHub Actions の「新店リサーチ（毎日）」が動きます（`.github/workflows/research.yml` → `tools/research_actions.py`）。GitHub Actions と GitHub Models（GitHub の無料のAI）の無料枠だけで動き、お金はかかりません。
+毎朝 5:43 に GitHub Actions の「新店リサーチ（毎日）」が動きます（`.github/workflows/research.yml` → `tools/research_actions.py`）。GitHub Actions の無料枠で動き、お金はかかりません。
+
+- **AIで判定する（おすすめ）**：Google AI Studio（https://aistudio.google.com/apikey）で無料の API キーを作り、GitHub の Settings → Secrets and variables → Actions →「New repository secret」に名前 `GEMINI_API_KEY` で登録。無料枠の範囲で動きます
+- **AIなし**：鍵がないときは、言葉のきまり（店名・番地つき住所・開店日・店主の記述）で読み取り、シートには「表示」を外した状態（メモに「要確認」）で取りこみます。確かめてからチェックを入れてください
 
 1. ニュースのRSS（Bing ニュース・Google ニュース）から、個人店の「独立・開店・新店」記事を地域ごとに集める
-2. 記事の本文を GitHub Models が読み、「個人オーナーの飲食店か」をルールどおりに判定して、店名・住所・開店日・個人店の根拠を取り出す（チェーン・企業運営・テナントは除外。住所の番地・開店日・根拠がそろわないものも除外）
+2. 記事の本文を AI（Gemini）または言葉のきまりで読み、「個人オーナーの飲食店か」を判定して、店名・住所・開店日・個人店の根拠を取り出す（チェーン・企業運営・テナントは除外。住所の番地・開店日・根拠がそろわないものも除外）
 3. 合格した店を `data/research-inbox.json` に追加 → 7時台に Apps Script が「新店」シートへ取りこむ（緯度・経度は住所から自動）
 4. リポジトリ変数 `SHEET_CSV_URL`（「新店」シートだけをCSVでウェブ公開したURL）があれば、そのCSVから `data/research.json` を作りなおして MAP に反映
 
 - 実行の記録と、その日に追加した店の一覧は、GitHub の「Actions」→「新店リサーチ（毎日）」で見られます。「Run workflow」で手動でも動かせます
-- AIの判定は Claude より大まかなので、シートの「表示」チェックで最終的にふるい分けてください
+- AIの判定は Claude より大まかなことがあるので、シートの「表示」チェックで最終的にふるい分けてください
 - 開店日から1年たつと、MAPでもシートでも自動で紫（1年以上）になります
 - 以前の Claude のスケジュール実行用の指示は `tools/daily-research-prompt.md` に残してあります（いまは使っていません）
 

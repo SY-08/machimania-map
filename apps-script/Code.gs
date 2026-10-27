@@ -175,7 +175,7 @@ function importResearchInbox() {
       "都道府県": it.pref || "", "市区町村": it.city || "", "住所": it.address || "",
       "緯度": it.lat, "経度": it.lng, "開店日": it.opened || "", "状態": "",
       "概要": it.summary || "", "背景": it.background || "", "情報源URL": (it.sources || []).join("\n"),
-      "見つけた日": it.found || today_(), "表示": true, "メモ": it.note || "", "個人店の根拠": it.owner || "",
+      "見つけた日": it.found || today_(), "表示": !it.review, "メモ": it.review ? "要確認（AIなしで自動で読み取った店。内容を確かめて「表示」にチェック）" : (it.note || ""), "個人店の根拠": it.owner || "",
     })[h]));
   }
   if (out.length) sh.getRange(sh.getLastRow() + 1, 1, out.length, SHEETS.shops.headers.length).setValues(out);
