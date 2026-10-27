@@ -245,7 +245,7 @@ def valid(r, text):
     if r is None:
         return False, "AIを呼び出せなかった（" + LAST_AI_ERROR["msg"][:120] + "）"
     if not r.get("ok"):
-        return False, "AI判定：" + (str(r.get("reason") or "").strip() or "対象外")
+        return False, "判定：" + (str(r.get("reason") or "").strip() or "対象外")
     for k in ("name", "address", "owner"):
         if not str(r.get(k, "")).strip():
             return False, f"{k} がない"
