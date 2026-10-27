@@ -5,7 +5,7 @@
  *   1. 毎日のリサーチ結果（GitHub の data/research-inbox.json）を「新店」シートに取りこむ
  *   2. 開店日から1年をこえたお店の「状態」を「1年以上」に切りかえる
  *   3. 「新店」シートで「表示」にチェックがある行を、MAP 用のデータ（data/research.json）として GitHub に書き出す
- *   4. 参加者の投稿・アカウント・通報を Supabase から「投稿」「アカウント」「通報」シートに写す
+ *   4. 参加者の投稿・アカウント・通報・ご意見を Supabase から「投稿」「アカウント」「通報」「要望」シートに写す
  *   5. シートで「非表示」にした投稿、「利用停止」「公式★」にチェックした人を Supabase に反映する
  *
  * 最初の設定（README の手順どおりに）
@@ -38,6 +38,11 @@ const SHEETS = {
     member: true,
     name: "通報",
     headers: ["通報ID", "日時", "通報した人", "対象の人", "対象の投稿", "理由"],
+  },
+  feedback: {
+    member: true,
+    name: "要望",
+    headers: ["要望ID", "日時", "種類", "内容", "ニックネーム", "ユーザーID", "場所", "緯度", "経度", "端末", "対応状況", "メモ"],
   },
   log: {
     member: true,
@@ -260,7 +265,8 @@ function syncSupabase() {
   pullPosts_();
   pullAccounts_();
   pullReports_();
-  log_("同期", "投稿・アカウント・通報を更新しました");
+  pullFeedback_();
+  log_("同期", "投稿・アカウント・通報・要望を更新しました");
 }
 
 function pullPosts_() {
@@ -330,6 +336,25 @@ function pullReports_() {
   const have = new Set(readRows_(sh, SHEETS.reports).map((r) => String(r["通報ID"])));
   const add = data.filter((d) => !have.has(String(d.id))).map((d) => [String(d.id), fmtTime_(d.created_at), d.reporter, d.target, d.message_id || "", d.reason || ""]);
   if (add.length) sh.getRange(sh.getLastRow() + 1, 1, add.length, SHEETS.reports.headers.length).setValues(add);
+}
+
+// ご意見（町の「💡ご意見」ボタン）を「要望」シートへ。対応状況とメモはシートで書く
+function pullFeedback_() {
+  const data = supa_("GET", "/rest/v1/feedback?select=*&order=created_at.asc&limit=5000");
+  const sh = sheet_(SHEETS.feedback);
+  const have = new Set(readRows_(sh, SHEETS.feedback).map((r) => String(r["要望ID"])));
+  const kindName = { fix: "解消してほしい点", idea: "追加してほしい要素" };
+  const add = data.filter((d) => !have.has(String(d.id))).map((d) => [
+    String(d.id), fmtTime_(d.created_at), kindName[d.kind] || d.kind, d.body || "", d.nickname || "", d.user_id || "",
+    d.area || "", d.lat == null ? "" : d.lat, d.lng == null ? "" : d.lng, d.device || "", "未対応", "",
+  ]);
+  if (add.length) {
+    const start = sh.getLastRow() + 1;
+    sh.getRange(start, 1, add.length, SHEETS.feedback.headers.length).setValues(add);
+    const col = SHEETS.feedback.headers.indexOf("対応状況") + 1;
+    const rule = SpreadsheetApp.newDataValidation().requireValueInList(["未対応", "対応中", "対応済み", "見送り"], true).build();
+    sh.getRange(start, col, add.length, 1).setDataValidation(rule);
+  }
 }
 
 /** シートでの判断（非表示・利用停止・公式★）を Supabase に反映 */

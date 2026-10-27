@@ -543,6 +543,29 @@ export class World {
     return why;
   }
 
+  // お店のまわりの小物（木・ベンチ・街灯・花）を置けるか
+  propClear(x, z, pad, selfId) {
+    const t = this.tileAt(x, z);
+    if (!t || !t.inLand(x, z)) return false;
+    for (const o of this.shopObjs) if (o.shop.id !== selfId && (x - o.x) ** 2 + (z - o.z) ** 2 < (3.6 + pad) ** 2) return false;
+    for (const st of this.stations) {
+      if ((x - st.plaza[0]) ** 2 + (z - st.plaza[1]) ** 2 < (6 + pad) ** 2) return false;
+      for (const sp of st.spots) if ((x - sp.x) ** 2 + (z - sp.z) ** 2 < (4.5 + pad) ** 2) return false;
+    }
+    const need = { rail: 1.2, major: 1.3, minor: 1.0, river: 1.2 };
+    let ok = true;
+    const near = new Set([t]);
+    for (const [dx, dz] of [[-6, 0], [6, 0], [0, -6], [0, 6]]) { const u = this.tileAt(x + dx, z + dz); if (u) near.add(u); }
+    for (const u of near) {
+      u.segs.near(x, z, 6, (it) => {
+        const n = need[it.tag];
+        if (n && segDist(x, z, it.a[0], it.a[1], it.b[0], it.b[1]).d < n + pad) { ok = false; return false; }
+      });
+      if (!ok) break;
+    }
+    return ok;
+  }
+
   // いちばん近い「建てられる場所」をさがす（見つからなければ null）
   findSite(x, z, maxR = 40, ignoreId = null) {
     if (!this.siteIssue(x, z, ignoreId)) return [x, z];
@@ -580,7 +603,7 @@ export class World {
       g.add(icon);
       const phase = Math.random() * 6;
       this.animated.push((dt, t) => { icon.position.y = 7.6 + Math.sin(t * 2 + phase) * 0.25; });
-      g.add(growth(shop, x, z, b.rotation.y));
+      g.add(growth(shop, x, z, b.rotation.y, (px, pz, pad) => this.propClear(px, pz, pad, shop.id)));
       g.visible = MODES[this.mode].kinds.includes(kind);
       this.scene.add(g);
       this.shopObjs.push({ shop, kind, look, x, z, group: g });
@@ -850,6 +873,28 @@ export class World {
   }
 
   // ---------------------------------------------------------------- 毎フレーム
+  // 会話中など、近くだけを細かく描きたいとき：r より遠い小物（駅・踏切・橋・お店のまわり）をかくす。null でもとにもどす
+  setDetailRadius(cx, cz, r) {
+    if (r == null) {
+      if (this._detailHidden) for (const o of this._detailHidden) o.visible = true;
+      this._detailHidden = null;
+      return;
+    }
+    if (!this._detailHidden) this._detailHidden = new Set();
+    const cars = new Set(this.trains.flatMap((tr) => tr.cars));
+    const r2 = r * r, groups = [];
+    for (const t of this.tiles.values()) for (const c of t.group.children) if (c.isGroup && !cars.has(c)) groups.push(c);
+    for (const o of this.shopObjs) groups.push(...o.group.children);
+    for (const c of groups) {
+      const p = c.position;
+      // 位置を持たない（子どもに座標がある）グループは、最初の子の位置で見る
+      const q = p.x === 0 && p.z === 0 && c.children[0] ? c.children[0].position : p;
+      const far = (q.x - cx) ** 2 + (q.z - cz) ** 2 > r2;
+      if (far && c.visible) { c.visible = false; this._detailHidden.add(c); }
+      else if (!far && this._detailHidden.has(c)) { c.visible = true; this._detailHidden.delete(c); }
+    }
+  }
+
   update(dt, t, px, pz) {
     this.sea.position.set(Math.round(px / 10) * 10, Y.sea, Math.round(pz / 10) * 10);
     this.waterTex.offset.y = -this.sea.position.z / 10;

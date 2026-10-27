@@ -300,3 +300,33 @@ language sql stable security definer set search_path = public as $$
   limit greatest(1, least(lim, 200));
 $$;
 grant execute on function public.post_ranking(int) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- ご意見（解消してほしい点・追加してほしい要素）
+-- 町の「💡ご意見」ボタンから届きます。運営者は Table Editor か、会員シートの「要望」で見られます
+-- ---------------------------------------------------------------------
+create table if not exists public.feedback (
+  id          bigint generated always as identity primary key,
+  user_id     uuid default auth.uid() references auth.users(id) on delete set null,
+  kind        text not null check (kind in ('fix', 'idea')),
+  body        text not null check (char_length(body) between 2 and 600),
+  nickname    text check (char_length(nickname) <= 40),
+  area        text check (char_length(area) <= 80),
+  lat         double precision,
+  lng         double precision,
+  device      text check (char_length(device) <= 160),
+  created_at  timestamptz not null default now()
+);
+alter table public.feedback enable row level security;
+-- 送るのは、ゲストも登録した人も（1人1日20件まで）。読めるのは自分が送ったものだけ
+create or replace function public.feedback_today(uid uuid) returns int
+  language sql stable security definer set search_path = public
+  as $$ select count(*)::int from public.feedback where user_id = uid and created_at > now() - interval '1 day' $$;
+revoke all on function public.feedback_today(uuid) from public;
+grant execute on function public.feedback_today(uuid) to authenticated;
+drop policy if exists "feedback_insert" on public.feedback;
+create policy "feedback_insert" on public.feedback for insert to authenticated
+  with check (user_id = auth.uid() and public.feedback_today(auth.uid()) < 20);
+drop policy if exists "feedback_select_own" on public.feedback;
+create policy "feedback_select_own" on public.feedback for select to authenticated using (user_id = auth.uid());
+grant insert, select on public.feedback to authenticated;

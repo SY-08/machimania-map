@@ -387,6 +387,14 @@ kbd { display: inline-block; border: 2px solid var(--ink); border-bottom-width: 
 .post-form .radio.big { border: 2.5px solid var(--ink); border-radius: 12px; padding: 8px 10px; background: #fff; }
 .post-form .radio.big span { display: flex; flex-direction: column; }
 .post-form .radio.big:has(input:checked) { background: #eaf3fd; }
+.post-form .radio.big small { font-weight: 600; opacity: .8; }
+.fb-mine { margin-top: 12px; font-size: 13px; }
+.fb-mine summary { cursor: pointer; font-weight: 800; }
+.fb-mine ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 30vh; overflow: auto; }
+.fb-mine li { background: rgba(255,255,255,.75); border-radius: 10px; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.fb-mine small { opacity: .65; }
+.fb-tag { align-self: flex-start; font-size: 11px; font-weight: 800; padding: 1px 8px; border-radius: 999px; background: #ffe3dc; }
+.fb-tag.idea { background: #fff3c4; }
 
 /* ---------------- 案内人との会話（カメラが寄って、吹き出しの会話ウィンドウ） */
 .talk-btn { background: #c9f0d4; }
@@ -541,6 +549,7 @@ body:has(#rideBtn:not([hidden])) .talk-btn { bottom: calc(140px + env(safe-area-
     <button class="btn icon-btn" id="btnShops" type="button" aria-label="お店リスト">🏪<small>お店</small></button>
     <button class="btn icon-btn" id="btnAvatar" type="button" aria-label="アバターを変える">🧑<small>すがた</small></button>
     <button class="btn icon-btn" id="btnAccount" type="button" aria-label="アカウント">🔑<small>登録</small></button>
+    <button class="btn icon-btn" id="btnFeedback" type="button" aria-label="ご意見をおくる（解消してほしい点・追加してほしい要素）">💡<small>ご意見</small></button>
     <button class="btn icon-btn help" id="btnHelp" type="button" aria-label="ナビにきく（ヘルプ）">？<small>ナビ</small></button>
   </div>
 </div>

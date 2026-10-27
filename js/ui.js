@@ -325,6 +325,26 @@ export function postFormHTML({ here, online, nickname, guide }) {
 }
 
 
+// ---------------------------------------------------------------- ご意見（解消してほしい点・追加してほしい要素）
+export function feedbackFormHTML({ online, nickname, here, mine = [] }) {
+  const list = mine.length ? `<details class="fb-mine"><summary>これまでに送った内容（${mine.length}件）</summary><ul>${mine.slice(-10).reverse().map((f) => `<li><span class="fb-tag ${f.kind}">${f.kind === "fix" ? "解消してほしい" : "追加してほしい"}</span>${esc(f.body)}<small>${esc(f.at || "")}</small></li>`).join("")}</ul></details>` : "";
+  return `
+    <h2>ご意見をおくる</h2>
+    <p class="lead">まちマニアMAPを、みんなでよくしていきたいです。こまったこと・こうなったらいいなを教えてください。送った内容は運営（まちマニア横塚）が読んで、記録しています。${online ? "" : "（いまはテストモードなので、この端末にだけ保存されます）"}</p>
+    <form id="fbForm" class="post-form" autocomplete="off">
+      <fieldset class="field how"><legend><b>どちらですか？</b></legend>
+        <label class="radio big"><input type="radio" name="fbKind" value="fix" required><span><b>🛠 解消してほしい点</b><small>うまく動かない・見づらい・使いにくい・おかしな表示など</small></span></label>
+        <label class="radio big"><input type="radio" name="fbKind" value="idea" required><span><b>✨ 追加してほしい要素</b><small>あったらうれしい機能・遊び・お店や町のアイデアなど</small></span></label>
+      </fieldset>
+      <label class="field"><b>内容（必須）</b><textarea id="fbBody" maxlength="600" required placeholder="例：線路の上にベンチがはみ出している（町田駅の近く）／ 友だちのいる場所にワープしたい"></textarea>
+        <span class="count" id="fbCount">0 / 600</span></label>
+      <label class="radio"><input type="checkbox" id="fbWhere" checked> いまいる場所もいっしょに送る（${esc(here)}）</label>
+      <p class="note">送る人：<b>${esc(nickname || "ゲスト")}</b>　※ 人やお店を傷つける言葉、個人の情報は書かないでください</p>
+      <div class="row-end"><button class="btn primary" type="submit" id="fbSend">送る</button></div>
+    </form>
+    ${list}`;
+}
+
 export function openAvatarEditor({ name = "", avatar, firstTime = false, nameLocked = false, nameNote = "", saveLabel = "", official = false, onSave }) {
   let cfg = sanitizeAvatar(avatar);
   const o = AVATAR_OPTIONS;

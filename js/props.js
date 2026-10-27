@@ -145,7 +145,8 @@ export function shopBuilding(shop, look) {
 }
 
 // お店のまわりに緑が育つ
-export function growth(shop, x, z, rot) {
+// ok(x, z, pad) が false の場所（線路・道路の上など）には小物を置かない
+export function growth(shop, x, z, rot, ok = () => true) {
   const g = new THREE.Group();
   const rnd = seeded(shop.id || shop.name);
   const grassC = document.createElement("canvas");
@@ -164,19 +165,22 @@ export function growth(shop, x, z, rot) {
   g.add(lawn);
   const greens = ["#6fae5b", "#83bd62", "#5c9d57", "#9cc86a"];
   const flowerCols = ["#ff9ab3", "#ffd45c", "#ffffff", "#b49cff", "#ff8a5c"];
-  const place = (minR, maxR) => {
-    for (let k = 0; k < 20; k++) {
+  const place = (minR, maxR, pad = 0.5) => {
+    for (let k = 0; k < 24; k++) {
       const a = rnd() * Math.PI * 2, r = minR + rnd() * (maxR - minR);
       const lx = Math.cos(a) * r, lz = Math.sin(a) * r;
       if (lz > 1.5 && Math.abs(lx) < 3) continue; // 入口の前はあける
       const wx = x + lx * Math.cos(rot) + lz * Math.sin(rot), wz = z - lx * Math.sin(rot) + lz * Math.cos(rot);
+      if (!ok(wx, wz, pad)) continue;
       return [wx, wz];
     }
-    return [x + maxR, z];
+    return null;   // 置ける場所がなければ置かない
   };
   const nTrees = 4 + Math.floor(rnd() * 4);
   for (let i = 0; i < nTrees; i++) {
-    const [tx, tz] = place(3.8, 8.5);
+    const tp = place(3.8, 8.5, 1.3);
+    if (!tp) continue;
+    const [tx, tz] = tp;
     const tree = new THREE.Group();
     const h = 1.0 + rnd() * 0.8;
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, h, 6), toon("#8a6142"));
@@ -201,14 +205,15 @@ export function growth(shop, x, z, rot) {
   const o = new THREE.Object3D();
   const col = new THREE.Color();
   for (let i = 0; i < flowers; i++) {
-    const [fx, fz] = place(2.8, 7.5);
-    o.position.set(fx, 0.18, fz); o.updateMatrix();
+    const fp = place(2.8, 7.5, 0.3);
+    if (fp) o.position.set(fp[0], 0.18, fp[1]); else o.position.set(x, -5, z);   // 置けない花は地面の下へ
+    o.updateMatrix();
     fm.setMatrixAt(i, o.matrix);
     fm.setColorAt(i, col.set(flowerCols[Math.floor(rnd() * flowerCols.length)]));
   }
   g.add(fm);
   // ベンチと街灯
-  const [bx, bz] = place(4.5, 6);
+  const bp = place(4.5, 6, 1.1);
   const bench = new THREE.Group();
   const seat = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.1, 0.45), toon("#a8754d"));
   seat.position.y = 0.45;
@@ -220,17 +225,21 @@ export function growth(shop, x, z, rot) {
     bench.add(leg);
   }
   bench.add(seat, back);
-  bench.position.set(bx, 0, bz);
-  bench.lookAt(x, 0, z);
-  g.add(bench);
-  const [lx, lz] = place(3.2, 4.2);
+  if (bp) {
+    bench.position.set(bp[0], 0, bp[1]);
+    bench.lookAt(x, 0, z);
+    g.add(bench);
+  }
+  const lpos = place(3.2, 4.2, 0.5);
   const lamp = new THREE.Group();
   const lp = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 2.4, 6), toon("#3f4a52"));
   lp.position.y = 1.2;
   const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshBasicMaterial({ color: "#fff1b8" }));
   bulb.position.y = 2.5;
   lamp.add(lp, bulb);
-  lamp.position.set(lx, 0, lz);
-  g.add(lamp);
+  if (lpos) {
+    lamp.position.set(lpos[0], 0, lpos[1]);
+    g.add(lamp);
+  }
   return g;
 }

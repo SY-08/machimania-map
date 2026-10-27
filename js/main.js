@@ -12,7 +12,7 @@ import { TownGuide, Dialogue, GUIDE_NAME } from "./npc.js";
 import { Avatar, randomAvatar, sanitizeAvatar } from "./avatar.js";
 import { LocalNet, SupabaseNet } from "./net.js";
 import { checkNick, checkPass } from "./account.js";
-import { MiniMap, openModal, toast, openAvatarEditor, shopCardHTML, shopListHTML, esc, anyModalOpen, searchPlaces, postFormHTML, safeUrl } from "./ui.js";
+import { MiniMap, openModal, toast, openAvatarEditor, shopCardHTML, shopListHTML, esc, anyModalOpen, searchPlaces, postFormHTML, feedbackFormHTML, safeUrl } from "./ui.js";
 import { cleanText, cleanReview, checkReview, REVIEW_GUIDE, RateLimiter, loadBlocked, saveBlocked, STAMPS, stampById } from "./moderation.js";
 
 const THREE = window.THREE;
@@ -215,7 +215,7 @@ async function boot() {
   const transport = new Transport(scene, W, index, proj, transportData);
   const townGuide = new TownGuide(scene);
   const dialog = new Dialogue();
-  let talkBlend = 0, talkWith = null;
+  let talkBlend = 0, talkWith = null, detailT = 1;
   $("#talkBtn").addEventListener("click", () => startTalk());
   const guide = new Guide();
   const selfTarget = { av: myAvatar, bubble: null };
@@ -619,6 +619,7 @@ async function boot() {
   }));
   $("#btnAccount").addEventListener("click", openAccount);
   $("#btnHelp").addEventListener("click", () => guide.menu());
+  $("#btnFeedback").addEventListener("click", () => openFeedback());
   guide.onCredits = () => openHelp();
 
   async function openAccount() {
@@ -937,14 +938,19 @@ async function boot() {
     if (rideBtnT > 0.3) { rideBtnT = 0; updateRideButton(); }
     // 空の上では遠くまで見えるように
     const high = ride && (ride.altitude || 0) > 15;
-    const fogFar = high ? 2600 : 430, fogNear = high ? 700 : 150;
-    scene.fog.far += (fogFar - scene.fog.far) * Math.min(1, dt * 2);
-    scene.fog.near += (fogNear - scene.fog.near) * Math.min(1, dt * 2);
+    // 会話中は低い画角で遠くまで見えてしまい重くなるので、遠くをかすませて描かない
+    const talkView = talkBlend > 0.02 && talkWith;
+    const fogFar = high ? 2600 : talkView ? 115 : 430, fogNear = high ? 700 : talkView ? 40 : 150;
+    scene.fog.far += (fogFar - scene.fog.far) * Math.min(1, dt * 2.5);
+    scene.fog.near += (fogNear - scene.fog.near) * Math.min(1, dt * 2.5);
     const sc = W.sea.scale.x + ((high ? 4 : 1) - W.sea.scale.x) * Math.min(1, dt * 2);
     W.sea.scale.set(sc, sc, 1);
-    W.sky.scale.setScalar(sc);
-    camera.far = Math.max(1200, scene.fog.far * 1.8);
-    camera.updateProjectionMatrix();
+    const far = talkView ? scene.fog.far + 10 : Math.max(1200, scene.fog.far * 1.8);
+    W.sky.scale.setScalar(Math.min(sc, (far * 0.92) / 900));   // 空は描く範囲の内側に
+    if (camera.far !== far) { camera.far = far; camera.updateProjectionMatrix(); }
+    detailT += dt;
+    if (talkView && detailT > 0.5) { detailT = 0; W.setDetailRadius(me.x, me.z, 70); }
+    else if (!talkView && W._detailHidden) W.setDetailRadius(0, 0, null);
 
     placeBubble(selfTarget, me.x, me.z, myAvatar.cfg.height);
     for (const p of peers.values()) {
@@ -1321,6 +1327,46 @@ async function boot() {
     });
   }
 
+  // ご意見（解消してほしい点・追加してほしい要素）を送る。送った内容は Supabase → 会員シート「要望」に記録
+  function openFeedback() {
+    const area = W.areaAt(me.x, me.z);
+    const [lat, lng] = proj.latlng(me.x, me.z);
+    const here = area ? `${area.pref}${area.name}` : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    let mine = [];
+    try { mine = JSON.parse(localStorage.getItem("machimania.feedbackMine") || "[]"); } catch { /* なし */ }
+    const online = net.mode === "online";
+    const m = openModal(feedbackFormHTML({ online, nickname: isMember() ? profile.name : "", here, mine }));
+    const f = $("#fbForm", m.el);
+    $("#fbBody", m.el).addEventListener("input", (e) => { $("#fbCount", m.el).textContent = `${[...e.target.value].length} / 600`; });
+    f.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const kind = f.querySelector("input[name=fbKind]:checked")?.value;
+      if (!kind) return toast("「解消してほしい点」か「追加してほしい要素」を選んでください");
+      const body = $("#fbBody", m.el).value.replace(/\s+\n/g, "\n").trim().slice(0, 600);
+      if ([...body].length < 4) return toast("内容をもう少しくわしく書いてください");
+      const rc = checkReview(body);
+      if (!rc.ok) return toast(`「${rc.word}」は${rc.why}にあたるため送れません。書き直してください`, 5000);
+      const withWhere = $("#fbWhere", m.el).checked;
+      const btn = $("#fbSend", m.el);
+      btn.disabled = true; btn.textContent = "送信中…";
+      try {
+        await net.sendFeedback({
+          kind, body, nickname: isMember() ? profile.name : "ゲスト",
+          area: withWhere ? here : null, lat: withWhere ? +lat.toFixed(5) : null, lng: withWhere ? +lng.toFixed(5) : null,
+          device: `${innerWidth}x${innerHeight} ${/Mobi|Android|iPhone|iPad/.test(navigator.userAgent) ? "スマホ" : "PC"}`,
+        });
+        mine.push({ kind, body: body.slice(0, 120), at: new Date().toLocaleDateString("ja-JP") });
+        try { localStorage.setItem("machimania.feedbackMine", JSON.stringify(mine.slice(-30))); } catch { /* なし */ }
+        m.close();
+        myAvatar.emote();
+        toast(kind === "fix" ? "ありがとうございます！ 解消してほしい点として受けつけました" : "ありがとうございます！ 追加してほしい要素として受けつけました", 4500);
+      } catch (ex) {
+        toast(ex.message, 5000);
+        btn.disabled = false; btn.textContent = "送る";
+      }
+    });
+  }
+
   function openSnsPost(s) {
     const sns = parseSns(s.snsUrl);
     if (!sns) return;
@@ -1547,7 +1593,7 @@ async function boot() {
   if (!store.get("welcomed")) {
     setTimeout(() => { guide.welcome(); store.set("welcomed", true); }, 900);
   }
-  window.__machimania = { me, peers, W, net, teleport, renderer, setMode: (m) => setMode(m), transport, guide, guide2: townGuide, startTalk, startTrain, startFlight, startShip, get ride() { return ride; } }; // 動作確認用
+  window.__machimania = { me, peers, W, net, teleport, renderer, camera, scene, setMode: (m) => setMode(m), transport, guide, guide2: townGuide, startTalk, startTrain, startFlight, startShip, get ride() { return ride; } }; // 動作確認用
 }
 
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }

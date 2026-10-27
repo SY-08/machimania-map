@@ -7,6 +7,7 @@ import { normNick, nickToLoginId, hashPassLocal, checkNick, checkPass } from "./
 
 const BUCKET = "community";
 const LOCAL_POSTS = "machimania.community";
+const LOCAL_FEEDBACK = "machimania.feedback";
 const LOCAL_ACCOUNTS = "machimania.accounts";
 const LOCAL_SESSION = "machimania.session";
 const lsGet = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
@@ -210,6 +211,15 @@ export class LocalNet extends Emitter {
   async isAdmin() { return false; }
   async listPending() { return []; }
   async reportShop() { return { ok: true, local: true }; }
+
+  // ---------- ご意見（テストモードではこの端末にだけ保存）
+  async sendFeedback(fb) {
+    let list = [];
+    try { list = JSON.parse(localStorage.getItem(LOCAL_FEEDBACK) || "[]"); } catch { /* なし */ }
+    list.push({ ...fb, id: "local-" + uid(), createdAt: new Date().toISOString() });
+    try { localStorage.setItem(LOCAL_FEEDBACK, JSON.stringify(list.slice(-50))); } catch { throw new Error("この端末に保存できませんでした"); }
+    return { ok: true, local: true };
+  }
 
   peerCount() { return this.peers.size; }
 
@@ -587,6 +597,18 @@ export class SupabaseNet extends Emitter {
   async review(dbId, status) {
     const { error } = await this.client.from("community_shops").update({ status, reviewed_at: new Date().toISOString() }).eq("id", dbId);
     if (error) throw new Error(error.message);
+  }
+
+  async sendFeedback(fb) {
+    const { error } = await this.client.from("feedback").insert({
+      kind: fb.kind, body: fb.body, nickname: fb.nickname || null, area: fb.area || null,
+      lat: fb.lat ?? null, lng: fb.lng ?? null, device: fb.device || null,
+    });
+    if (error) {
+      if (/feedback_limit|row-level security/i.test(error.message)) throw new Error("今日はもうたくさん送ってくれました。また明日おねがいします");
+      throw new Error("送れませんでした：" + error.message);
+    }
+    return { ok: true };
   }
 
   async reportShop(shop, reason) {
