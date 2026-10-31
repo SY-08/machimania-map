@@ -9,6 +9,7 @@ import { parseSns } from "./media.js";
 import { Transport, Ride } from "./transport.js";
 import { Guide } from "./guide.js";
 import { TownGuide, Dialogue, GUIDE_NAME } from "./npc.js";
+import { unseenUpdates, LATEST_UPDATE } from "./updates.js";
 import { Avatar, randomAvatar, sanitizeAvatar } from "./avatar.js";
 import { LocalNet, SupabaseNet } from "./net.js";
 import { checkNick, checkPass } from "./account.js";
@@ -1589,8 +1590,24 @@ async function boot() {
       }
     });
   }
-  // はじめての人には、ナビが使い方を案内する
-  if (!store.get("welcomed")) {
+  // ナビの案内
+  //   ゲスト：はじめてこの端末で開いたときだけ「ようこそ」
+  //   ログインしている人：「ようこそ」は出さず、まだ見ていない新しい機能のお知らせだけ（見たかどうかはアカウントに記録）
+  if (isMember()) {
+    store.set("welcomed", true);
+    const st = net.updateState?.();
+    if (st) {
+      const list = unseenUpdates(st.seen, st.since);
+      if (!st.seen && !list.length) net.markUpdateSeen(LATEST_UPDATE).catch(() => {});
+      if (list.length) {
+        setTimeout(() => {
+          const steps = list.flatMap((u) => u.steps);
+          guide.play(steps, list.length === 1 ? `お知らせ：${list[0].title}` : "お知らせ");
+          net.markUpdateSeen(LATEST_UPDATE).catch(() => {});
+        }, 1200);
+      }
+    }
+  } else if (!store.get("welcomed")) {
     setTimeout(() => { guide.welcome(); store.set("welcomed", true); }, 900);
   }
   window.__machimania = { me, peers, W, net, teleport, renderer, camera, scene, setMode: (m) => setMode(m), transport, guide, guide2: townGuide, startTalk, startTrain, startFlight, startShip, get ride() { return ride; } }; // 動作確認用

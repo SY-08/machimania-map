@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>まちマニアMAP</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="日本じゅうのお店が建っていく、みんなで歩ける3Dマップ。">
@@ -501,6 +501,70 @@ body:has(#rideBtn:not([hidden])) .talk-btn { bottom: calc(140px + env(safe-area-
   body:has(#rideBtn:not([hidden])) .talk-btn { bottom: calc(202px + env(safe-area-inset-bottom, 0px)); }
   .ride-hud { top: auto; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); width: calc(100vw - 24px); }
   .ride-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* ---------------- スマホ用のレイアウト（画面のはしが切れない・ズームしない・指でおしやすい） */
+@media (max-width: 640px), (max-height: 500px) and (pointer: coarse) {
+  .modebar .l { display: none; }
+  .modebar .s { display: inline; }
+  .map-hint { display: none; }
+  html, body { position: fixed; inset: 0; width: 100%; overflow: hidden; }
+  /* iPhone は 16px より小さい入力欄をさわると拡大して戻らなくなるので、入力欄は16px */
+  input, select, textarea { font-size: 16px !important; }
+  .hud-tl { gap: 6px; max-width: calc(100vw - 150px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); top: calc(8px + env(safe-area-inset-top, 0px)); left: max(8px, env(safe-area-inset-left, 0px)); }
+  .hud-tr { gap: 6px; top: calc(8px + env(safe-area-inset-top, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); }
+  .logo { font-size: 17px; padding: 5px 10px 6px; box-shadow: 0 3px 0 var(--shadow); }
+  .logo small { font-size: 9.5px; }
+  .chips { gap: 4px; }
+  .chip { font-size: 10.5px; padding: 2px 8px; border-width: 2px; box-shadow: 0 2px 0 var(--shadow); gap: 4px; }
+  .chip .dot { width: 7px; height: 7px; }
+  .modebar { gap: 1px; padding: 3px; border-width: 2.5px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .modebar::-webkit-scrollbar { display: none; }
+  .modebar button { padding: 4px 7px; font-size: 11px; }
+  .legend.chipline { flex-wrap: nowrap; gap: 7px; padding: 2px 8px; border-width: 2px; box-shadow: 0 2px 0 var(--shadow); max-width: 100%; overflow: hidden; }
+  .legend span { font-size: 10.5px; gap: 3px; white-space: nowrap; }
+  .legend i { width: 9px; height: 9px; border-width: 1.5px; border-radius: 3px; }
+  .news { width: calc(100vw - 72px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); border-width: 2.5px; }
+  .news-head { padding: 5px 10px; font-size: 12px; }
+  .news-list { max-height: 34vh; }
+  .map-wrap { padding: 3px; border-radius: 13px; border-width: 2.5px; }
+  #minimap { width: 118px; height: 80px; border-radius: 9px; }
+  .map-toggle { right: 6px; bottom: 6px; font-size: 9.5px; padding: 1px 5px; }
+  .compass { left: 6px; top: 6px; font-size: 9px; }
+  .tools { gap: 6px; }
+  .icon-btn, .icon-btn.wide { width: 38px; height: 38px; font-size: 15px; border-width: 2.5px; border-radius: 12px; }
+  .icon-btn small { font-size: 7.5px; }
+  .icon-btn.wide small { font-size: 6.5px; }
+  /* ナビ：画面の下に、小さめのカードで */
+  .guide { box-sizing: border-box; width: calc(100vw - 16px); grid-template-columns: 40px 1fr; gap: 8px; padding: 8px 10px; bottom: calc(74px + env(safe-area-inset-bottom, 0px)); border-width: 2.5px; }
+  #guideFace { width: 40px; height: 40px; border-width: 2px; }
+  .guide-head { padding-right: 30px; }
+  .guide-head b { font-size: 14px; }
+  .guide-head span { font-size: 11px; }
+  .guide p { font-size: 13.5px; line-height: 1.6; min-height: 3.2em; }
+  .guide-actions { gap: 6px; }
+  .guide-actions .btn { min-height: 34px; padding: 0 12px; font-size: 13px; border-width: 2.5px; }
+  .guide .close-x { top: 6px; right: 6px; }
+  .guide-topics { grid-template-columns: 1fr 1fr; max-height: 38vh; overflow: auto; }
+  .guide-topics button { font-size: 12.5px; padding: 6px 8px; }
+  /* お知らせ（トースト）は画面の上に、横いっぱいで短く */
+  #toast { left: max(8px, env(safe-area-inset-left, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); transform: none; max-width: none; top: calc(8px + env(safe-area-inset-top, 0px)); font-size: 12.5px; padding: 7px 12px; line-height: 1.5; border-width: 2.5px; }
+  /* 移動スティックは左下、乗る・話すボタンは右下（重ならないように） */
+  #joystick { width: 100px; height: 100px; left: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+  #joystick .knob { width: 42px; height: 42px; margin: -21px 0 0 -21px; }
+  .ride-btn { left: auto; right: max(10px, env(safe-area-inset-right, 0px)); transform: none; bottom: calc(86px + env(safe-area-inset-bottom, 0px)); font-size: 13.5px; min-height: 40px; padding: 0 14px; max-width: calc(100vw - 140px); animation: bobR 1.6s ease-in-out infinite; }
+  .ride-btn:active { transform: translateY(2px); }
+  body:has(#rideBtn:not([hidden])) .talk-btn { bottom: calc(134px + env(safe-area-inset-bottom, 0px)); }
+  .chatbar { width: calc(100vw - 16px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .ride-hud { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); width: calc(100vw - 16px); }
+}
+@keyframes bobR { 50% { transform: translateY(-4px); } }
+/* 横向きのスマホ（高さがせまい） */
+@media (max-height: 500px) and (orientation: landscape) and (pointer: coarse) {
+  .legend.chipline, .news { display: none !important; }
+  #minimap { width: 110px; height: 70px; }
+  .tools { flex-direction: row; }
+  .hud-tl { max-width: calc(100vw - 290px); }
+  .guide { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>

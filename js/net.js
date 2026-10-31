@@ -70,6 +70,15 @@ export class LocalNet extends Emitter {
     lsSet(LOCAL_SESSION, { key });
   }
   async logout() { try { localStorage.removeItem(LOCAL_SESSION); } catch { /* なし */ } location.reload(); }
+  // 運営からのお知らせを、どこまで見たか（アカウントごと）
+  updateState() {
+    const sess = lsGet(LOCAL_SESSION, null), acc = sess && lsGet(LOCAL_ACCOUNTS, {})[sess.key];
+    return acc ? { seen: acc.seenUpdate || null, since: acc.created || null } : null;
+  }
+  async markUpdateSeen(id) {
+    const sess = lsGet(LOCAL_SESSION, null), all = lsGet(LOCAL_ACCOUNTS, {});
+    if (sess && all[sess.key]) { all[sess.key].seenUpdate = id; lsSet(LOCAL_ACCOUNTS, all); }
+  }
   async updateProfile(me) {
     this.me = me;
     const sess = lsGet(LOCAL_SESSION, null), all = lsGet(LOCAL_ACCOUNTS, {});
@@ -365,6 +374,17 @@ export class SupabaseNet extends Emitter {
     this._selfAuth = true;
     const { error } = await this.client.auth.signInWithPassword({ email, password: pass });
     if (error) throw new Error(/invalid/i.test(error.message) ? "ニックネームかパスワードがちがいます" : "ログインできませんでした（" + error.message + "）");
+  }
+
+  // 運営からのお知らせを、どこまで見たか（アカウントに記録するので、別の端末でも同じ）
+  updateState() {
+    if (!this.user || this.user.is_anonymous) return null;
+    return { seen: this.user.user_metadata?.seen_update || null, since: this.user.created_at || null };
+  }
+  async markUpdateSeen(id) {
+    if (!this.user || this.user.is_anonymous) return;
+    const { data, error } = await this.client.auth.updateUser({ data: { seen_update: id } });
+    if (!error && data?.user) this.user = data.user;
   }
 
   async myPostCount() {
