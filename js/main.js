@@ -704,7 +704,38 @@ async function boot() {
   addEventListener("keyup", (e) => keys.delete(e.code));
   addEventListener("blur", () => keys.clear());
 
-  let yaw = 0, pitch = 0.8, zoom = 1.25, lastUserCam = 0;
+  // 町の見え方（％）：100% がふつう。大きくすると寄る、小さくすると引いて広く見える
+  const ZOOM_BASE = 1.25;
+  const pctOf = (z) => Math.round(ZOOM_BASE / z * 100);
+  let yaw = 0, pitch = 0.8, zoom = clamp(ZOOM_BASE * 100 / (Number(store.get("viewPct")) || 100), 0.35, 3.4), lastUserCam = 0;
+  let shownPct = 0;
+  function setViewPct(p, save = true) {
+    p = clamp(Math.round(p / 10) * 10, 40, 300);
+    zoom = ZOOM_BASE * 100 / p;
+    if (save) store.set("viewPct", p);
+  }
+  function syncZoomUi() {
+    const p = pctOf(zoom);
+    if (p === shownPct) return;
+    shownPct = p;
+    $("#zoomPct").textContent = p + "%";
+    $("#zoomVal").textContent = p + "%";
+    $("#zoomRange").value = String(clamp(Math.round(p / 10) * 10, 40, 300));
+  }
+  $("#zoomIn").addEventListener("click", () => setViewPct(pctOf(zoom) + (pctOf(zoom) >= 150 ? 25 : 10)));
+  $("#zoomOut").addEventListener("click", () => setViewPct(pctOf(zoom) - (pctOf(zoom) > 150 ? 25 : 10)));
+  $("#zoomRange").addEventListener("input", (e) => setViewPct(+e.target.value));
+  $("#zoomReset").addEventListener("click", () => setViewPct(100));
+  $("#zoomPct").addEventListener("click", () => {
+    const pop = $("#zoomPop"), open = pop.hidden;
+    pop.hidden = !open;
+    $("#zoomPct").setAttribute("aria-expanded", String(open));
+  });
+  addEventListener("pointerdown", (e) => {
+    if (!$("#zoomPop").hidden && !e.target.closest("#zoomCtl")) { $("#zoomPop").hidden = true; $("#zoomPct").setAttribute("aria-expanded", "false"); }
+  });
+  let zoomSaveT = null;
+  const saveZoomSoon = () => { clearTimeout(zoomSaveT); zoomSaveT = setTimeout(() => store.set("viewPct", pctOf(zoom)), 600); };
   const pointers = new Map();
   let drag = null, pinchD = 0;
   canvas.addEventListener("pointerdown", (e) => {
@@ -720,7 +751,7 @@ async function boot() {
     if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
-      if (pinchD) zoom = clamp(zoom * (pinchD / d), 0.35, 3.4);
+      if (pinchD) { zoom = clamp(zoom * (pinchD / d), ZOOM_BASE / 3, ZOOM_BASE / 0.4); saveZoomSoon(); }
       pinchD = d;
       return;
     }
@@ -738,7 +769,7 @@ async function boot() {
   };
   canvas.addEventListener("pointerup", endPointer);
   canvas.addEventListener("pointercancel", (e) => { pointers.delete(e.pointerId); drag = null; });
-  canvas.addEventListener("wheel", (e) => { e.preventDefault(); zoom = clamp(zoom * Math.exp(e.deltaY * 0.0012), 0.35, 3.4); }, { passive: false });
+  canvas.addEventListener("wheel", (e) => { e.preventDefault(); zoom = clamp(zoom * Math.exp(e.deltaY * 0.0012), ZOOM_BASE / 3, ZOOM_BASE / 0.4); saveZoomSoon(); }, { passive: false });
 
   // 目的地マーカー
   const marker = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.75, 24), new THREE.MeshBasicMaterial({ color: "#ffcf4a", transparent: true, opacity: 0.9, depthWrite: false }));
@@ -895,6 +926,7 @@ async function boot() {
     const camY = ride ? ride.pos.y + 1.6 : 1.6;
     if (ride && Math.hypot(camTarget.x - me.x, camTarget.z - me.z) > 60) camTarget.set(me.x, camY, me.z);
     camTarget.lerp(new THREE.Vector3(me.x, camY, me.z), 1 - Math.exp(-10 * dt));
+    syncZoomUi();
     let dist = 21 * zoom + (ride ? (ride.kind === "train" ? 10 : ride.kind === "ship" ? 18 : 30 + (ride.altitude || 0) * 1.4) : 0);
     // 会話中はカメラがふたりに寄る（肩ごしに、話し相手を見る画角）
     talkBlend += ((dialog.open ? 1 : 0) - talkBlend) * (1 - Math.exp(-4 * dt));
