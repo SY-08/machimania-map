@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-27T14:32:41+09:00",
+  "updated": "2026-10-31T09:05:09+09:00",
   "items": [
     {
       "id": "r-20261022-3",
@@ -149,6 +149,74 @@
         "https://food-stadium.com/headline/40028/"
       ],
       "found": "2026-10-27",
+      "review": true
+    },
+    {
+      "id": "r-20261031-1",
+      "name": "神楽坂珈琲焙煎所",
+      "genre": "udon",
+      "pref": "東京都",
+      "city": "文京区",
+      "address": "東京都文京区関口の江戸川橋・地蔵通り商店街にある1",
+      "opened": "2026-12-25",
+      "summary": "創業23年の自家焙煎珈琲店「神楽坂珈琲焙煎所」、江戸川橋・地蔵通り商店街へ移転 イートイン併設の新店舗開設に向け、11月",
+      "background": "",
+      "owner": "店主からのメッセージ いつもの日常の中で、珈琲をきっかけに誰かと話したり、ほっとひと",
+      "sources": [
+        "https://mantan-web.jp/prtimes/article/20261030prt00m200000275a.html"
+      ],
+      "found": "2026-10-31",
+      "review": true
+    },
+    {
+      "id": "r-20261031-2",
+      "name": "アニメイトプサン",
+      "genre": "cafe",
+      "pref": "東京都",
+      "city": "世田谷区",
+      "address": "東京都世田谷区代沢2-46-5",
+      "opened": "2026-10-01",
+      "summary": "HONYAL利用書店数、2年で100店を突破：時事ドットコム",
+      "background": "",
+      "owner": "その内訳は、新規開業が80店、既存の独立系書店との取引開始が25店、以上を合計した『HONYALを利用し営業中の書店』は",
+      "sources": [
+        "https://www.jiji.com/jc/article?k=000000138.000026460&g=prt"
+      ],
+      "found": "2026-10-31",
+      "review": true
+    },
+    {
+      "id": "r-20261031-3",
+      "name": "大阪ベイタワー店",
+      "genre": "ramen",
+      "pref": "大阪府",
+      "city": "大阪市",
+      "address": "大阪府大阪市港区弁天1丁目2-2",
+      "opened": "2026-11-12",
+      "summary": "【スガキヤ新店】関東で連日行列、次は大阪市内に出店！11月12日（木）大阪ベイタワー店オープン！好評の朝ラーメンも拡大",
+      "background": "",
+      "owner": "新しい美味しさをいつも、いつまでも、どこでもお召し上がりいただける企業となり、「ひとりでも多くのお客様に楽しんでいただくこと」に取り組んでいます",
+      "sources": [
+        "https://www.sankei.com/pressrelease/prtimes/OEFW5LJU5VKA7ISHM2FTRQT44I/"
+      ],
+      "found": "2026-10-31",
+      "review": true
+    },
+    {
+      "id": "r-20261031-4",
+      "name": "特上鶏醤油らぁ麺",
+      "genre": "ramen",
+      "pref": "大阪府",
+      "city": "大阪市",
+      "address": "大阪府大阪市北区太融寺町1-9",
+      "opened": "2026-09-14",
+      "summary": "【大阪･東梅田】オープン直後から行列！SNSで話題の新店「特上鶏醤油らぁ麺」（ギャルソンヌ） - エキスパート - Ya",
+      "background": "",
+      "owner": "「彩色ラーメンきんせい」「ストライク軒」、さらには東京の有名店でも経験を積まれた店主さんが、この地で新たに立ち上げた注目の一軒です",
+      "sources": [
+        "https://news.yahoo.co.jp/expert/articles/b38d1e8b636e34b3d18987bac3e03e0d5bf1a996"
+      ],
+      "found": "2026-10-31",
       "review": true
     }
   ],
