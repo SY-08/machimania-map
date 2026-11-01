@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-31T09:05:09+09:00",
+  "updated": "2026-11-02T08:54:42+09:00",
   "items": [
     {
       "id": "r-20261022-3",
@@ -217,6 +217,23 @@
         "https://news.yahoo.co.jp/expert/articles/b38d1e8b636e34b3d18987bac3e03e0d5bf1a996"
       ],
       "found": "2026-10-31",
+      "review": true
+    },
+    {
+      "id": "r-20261102-1",
+      "name": "小麦作ベーカリー",
+      "genre": "ramen",
+      "pref": "東京都",
+      "city": "八王子市",
+      "address": "東京都八王子市明神町4-25-7",
+      "opened": "2026-10-01",
+      "summary": "【八王子】新店ラッシュが止まらない！10月にオープンした注目の飲食店7選 | 八王子ジャーニー",
+      "background": "",
+      "owner": "人気居酒屋『卵箸(らんちょん)』の店主が手掛ける、こだわり満載の北海道味噌ラーメン",
+      "sources": [
+        "https://8dabe.com/2026/11/01/2610-open-matome/"
+      ],
+      "found": "2026-11-02",
       "review": true
     }
   ],
