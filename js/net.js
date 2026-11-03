@@ -340,6 +340,8 @@ export class SupabaseNet extends Emitter {
       this.nickname = prof?.name || this.user.user_metadata?.nickname || null;
     }
     this._ready = true;
+    // 来た記録（1人1日1行。ゲストか登録した人かも）。運営が「来た人数」を数えるためだけに使う
+    this.client.rpc("log_visit").then(() => {}, () => {});
     return { id: this.id, profile: prof || null, ...this.account() };
   }
 

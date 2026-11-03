@@ -5,7 +5,7 @@
  *   1. 毎日のリサーチ結果（GitHub の data/research-inbox.json）を「新店」シートに取りこむ
  *   2. 開店日から1年をこえたお店の「状態」を「1年以上」に切りかえる
  *   3. 「新店」シートで「表示」にチェックがある行を、MAP 用のデータ（data/research.json）として GitHub に書き出す
- *   4. 参加者の投稿・アカウント・通報・ご意見を Supabase から「投稿」「アカウント」「通報」「要望」シートに写す
+ *   4. 参加者の投稿・アカウント・通報・ご意見・ゲストを Supabase から「投稿」「アカウント」「通報」「要望」「ゲスト」「来訪集計」シートに写す
  *   5. シートで「非表示」にした投稿、「利用停止」「公式★」にチェックした人を Supabase に反映する
  *
  * 最初の設定（README の手順どおりに）
@@ -43,6 +43,16 @@ const SHEETS = {
     member: true,
     name: "要望",
     headers: ["要望ID", "日時", "種類", "内容", "ニックネーム", "ユーザーID", "場所", "緯度", "経度", "端末", "対応状況", "メモ"],
+  },
+  guests: {
+    member: true,
+    name: "ゲスト",
+    headers: ["ゲストID", "初めて来た日時", "最後に来た日時", "来た日数", "開いた回数", "その後登録"],
+  },
+  visits: {
+    member: true,
+    name: "来訪集計",
+    headers: ["日付", "ゲスト（人）", "登録した人（人）", "合計（人）", "新しく来たゲスト（人）"],
   },
   log: {
     member: true,
@@ -266,7 +276,8 @@ function syncSupabase() {
   pullAccounts_();
   pullReports_();
   pullFeedback_();
-  log_("同期", "投稿・アカウント・通報・要望を更新しました");
+  pullGuests_();
+  log_("同期", "投稿・アカウント・通報・要望・ゲストを更新しました");
 }
 
 function pullPosts_() {
@@ -292,13 +303,7 @@ function pullAccounts_() {
   const names = new Map(profiles.map((p) => [p.id, p]));
   const official = new Set(supa_("GET", "/rest/v1/official_users?select=user_id").map((r) => r.user_id));
   const banned = new Set(supa_("GET", "/rest/v1/banned_users?select=user_id").map((r) => r.user_id));
-  const users = [];
-  for (let page = 1; page <= 20; page++) {
-    const res = supa_("GET", `/auth/v1/admin/users?page=${page}&per_page=500`);
-    const list = res.users || [];
-    users.push(...list);
-    if (list.length < 500) break;
-  }
+  const users = allUsers_();
   // 投稿数（公開中の口コミの数）
   const counts = new Map();
   for (const c of supa_("GET", "/rest/v1/community_shops?select=user_id&status=eq.approved&limit=100000")) counts.set(c.user_id, (counts.get(c.user_id) || 0) + 1);
@@ -336,6 +341,75 @@ function pullReports_() {
   const have = new Set(readRows_(sh, SHEETS.reports).map((r) => String(r["通報ID"])));
   const add = data.filter((d) => !have.has(String(d.id))).map((d) => [String(d.id), fmtTime_(d.created_at), d.reporter, d.target, d.message_id || "", d.reason || ""]);
   if (add.length) sh.getRange(sh.getLastRow() + 1, 1, add.length, SHEETS.reports.headers.length).setValues(add);
+}
+
+// Supabase に登録されている人（ゲストもふくむ）。1回の同期で1度だけ読む
+let usersCache_ = null;
+function allUsers_() {
+  if (usersCache_) return usersCache_;
+  const users = [];
+  for (let page = 1; page <= 40; page++) {
+    const res = supa_("GET", `/auth/v1/admin/users?page=${page}&per_page=500`);
+    const list = res.users || [];
+    users.push(...list);
+    if (list.length < 500) break;
+  }
+  usersCache_ = users;
+  return users;
+}
+
+// ゲスト（登録せずに見に来た人）の一覧と、日ごとの来た人数
+function pullGuests_() {
+  const users = allUsers_();
+  const visits = [];
+  for (let off = 0; off < 200000; off += 1000) {
+    const page = supa_("GET", `/rest/v1/visits?select=user_id,day,guest,first_at,last_at,opens&order=day.asc&offset=${off}&limit=1000`);
+    visits.push(...page);
+    if (page.length < 1000) break;
+  }
+  const byUser = new Map();
+  for (const v of visits) {
+    const a = byUser.get(v.user_id) || { days: 0, opens: 0, last: null, guestDays: 0 };
+    a.days++; a.opens += v.opens || 0;
+    if (v.guest) a.guestDays++;
+    if (!a.last || v.last_at > a.last) a.last = v.last_at;
+    byUser.set(v.user_id, a);
+  }
+  // ゲスト一覧：ゲストとして来たことがある人（いまゲストの人＋ゲストのあとで登録した人）
+  const rows = [];
+  for (const u of users) {
+    const a = byUser.get(u.id);
+    if (!u.is_anonymous && !(a && a.guestDays)) continue;
+    rows.push([
+      String(u.id).slice(0, 8), fmtTime_(u.created_at), fmtTime_((a && a.last) || u.last_sign_in_at || u.created_at),
+      a ? a.days : 1, a ? a.opens : 1, u.is_anonymous ? "" : "登録した",
+    ]);
+  }
+  rows.sort((x, y) => String(y[1]).localeCompare(String(x[1])));   // 新しい順
+  const gs = sheet_(SHEETS.guests);
+  if (gs.getLastRow() > 1) gs.getRange(2, 1, gs.getLastRow() - 1, SHEETS.guests.headers.length).clearContent();
+  if (rows.length) gs.getRange(2, 1, rows.length, SHEETS.guests.headers.length).setValues(rows);
+
+  // 日ごとの人数（ゲストが初めて来た日は、アカウントの作成日で数える）
+  const days = new Map();
+  const day = (k) => { if (!days.has(k)) days.set(k, { guest: new Set(), member: new Set(), newGuest: 0 }); return days.get(k); };
+  for (const v of visits) (v.guest ? day(v.day).guest : day(v.day).member).add(v.user_id);
+  for (const u of users) if (u.is_anonymous || (byUser.get(u.id) || {}).guestDays) {
+    day(Utilities.formatDate(new Date(u.created_at), "Asia/Tokyo", "yyyy-MM-dd")).newGuest++;
+  }
+  const out = [...days.keys()].sort().reverse().map((k) => {
+    const d = days.get(k);
+    return [k, d.guest.size, d.member.size, d.guest.size + d.member.size, d.newGuest];
+  });
+  const vs = sheet_(SHEETS.visits);
+  if (vs.getLastRow() > 1) vs.getRange(2, 1, vs.getLastRow() - 1, SHEETS.visits.headers.length).clearContent();
+  if (out.length) vs.getRange(2, 1, out.length, SHEETS.visits.headers.length).setValues(out);
+  vs.getRange(1, 7, 4, 2).setValues([
+    ["ゲストの合計（これまで）", rows.filter((r) => !r[5]).length + rows.filter((r) => r[5]).length],
+    ["いまもゲストのまま", rows.filter((r) => !r[5]).length],
+    ["ゲストのあと登録した", rows.filter((r) => r[5]).length],
+    ["更新", fmtTime_(new Date().toISOString())],
+  ]);
 }
 
 // ご意見（町の「💡ご意見」ボタン）を「要望」シートへ。対応状況とメモはシートで書く

@@ -330,3 +330,30 @@ create policy "feedback_insert" on public.feedback for insert to authenticated
 drop policy if exists "feedback_select_own" on public.feedback;
 create policy "feedback_select_own" on public.feedback for select to authenticated using (user_id = auth.uid());
 grant insert, select on public.feedback to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 来た記録（ゲスト・登録した人の人数を数える）
+-- 町を開くたびに log_visit() が呼ばれ、1人1日1行で「最初に来た時刻・最後に来た時刻・開いた回数」を残します
+-- 中身は運営だけが見られます（会員シートの「ゲスト」「来訪集計」に毎時写ります）
+-- ---------------------------------------------------------------------
+create table if not exists public.visits (
+  user_id   uuid not null references auth.users(id) on delete cascade,
+  day       date not null default (now() at time zone 'Asia/Tokyo')::date,
+  guest     boolean not null default true,
+  first_at  timestamptz not null default now(),
+  last_at   timestamptz not null default now(),
+  opens     int not null default 1,
+  primary key (user_id, day)
+);
+alter table public.visits enable row level security;   -- ポリシーなし＝アプリからは直接読めない
+create or replace function public.log_visit() returns void
+  language sql security definer set search_path = public
+  as $$
+    insert into public.visits (user_id, guest)
+    values (auth.uid(), coalesce((auth.jwt() ->> 'is_anonymous')::boolean, true))
+    on conflict (user_id, day) do update
+      set last_at = now(), opens = public.visits.opens + 1, guest = excluded.guest
+    where auth.uid() is not null;
+  $$;
+revoke all on function public.log_visit() from public;
+grant execute on function public.log_visit() to authenticated;
